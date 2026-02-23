@@ -2,6 +2,48 @@
 
 Lokaler, KI-gestuetzter Verkaufsassistent fuer eBay. Erfasst Produkte per USB-Kamera, identifiziert sie automatisch mit Ollama Vision und erstellt eBay-Listings mit Preisrecherche, Versandetiketten und Bestellverwaltung.
 
+## Screenshots
+
+### Dashboard
+Artikeluebersicht mit Status-Workflow, internen Post-it-Nummern, Stueckzahlen und Preisen.
+
+![Dashboard](docs/screenshots/01_dashboard.png)
+
+### Produkterfassung
+Live-Kamerastream mit PTZ-Steuerung und Ausschnitt-Auswahl (Crop).
+
+![Kamera](docs/screenshots/02_capture.png)
+
+### KI-Identifikation
+2-Step OCR Pipeline: Vision-Modell liest Text, Text-Modell strukturiert JSON. Deterministischer Part-Number-Decoder fuer RAM-Module.
+
+![Identifikation](docs/screenshots/03_identify.png)
+
+### Preisrecherche
+Automatische Preisrecherche via eBay Browse API und Playwright-Scraping mit Preisempfehlung.
+
+![Preisrecherche](docs/screenshots/04_research.png)
+
+### Listing erstellen
+Formular mit KI-generierten Daten, Preisvorschlaegen, Zeitplanung und automatischen Item Specifics.
+
+![Listing erstellen](docs/screenshots/05_listing_form.png)
+
+### Listing Detail
+Detailansicht mit Timeline, Dry-Run-Gebuehren, geplanter Veroeffentlichung und Versand-Tracking.
+
+![Listing Detail](docs/screenshots/06_listing_detail.png)
+
+### Alle Listings
+Uebersicht aller Listings mit Status, Format, Preis und eBay-Gebuehren.
+
+![Listings](docs/screenshots/07_listing_list.png)
+
+### eBay Autorisierung
+OAuth 2.0 Setup mit Token-Status und Einrichtungsanleitung.
+
+![eBay Auth](docs/screenshots/08_ebay_auth.png)
+
 ## Features
 
 ### Produkterfassung & Kamera
