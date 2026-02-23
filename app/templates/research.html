@@ -1,0 +1,430 @@
+{% extends "base.html" %}
+
+{% set active_page = 'research' %}
+
+{% block title %}Preisrecherche - Artikel #{{ item.id }} - IceSeller{% endblock %}
+
+{% block content %}
+<div class="row g-3">
+
+    <!-- Left column: item info -->
+    <div class="col-lg-4">
+        <div class="card bg-dark border-secondary">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-box-seam"></i> Artikel #{{ item.id }}</span>
+                <span class="badge status-{{ item.status }}">{{ item.status }}</span>
+            </div>
+            <div class="card-body">
+                {% if item.images %}
+                <div class="text-center mb-3">
+                    <img src="/data/images/{{ item.images[0] }}"
+                         alt="Artikelbild"
+                         class="img-fluid rounded"
+                         style="max-height: 200px; object-fit: contain; background: #111;">
+                </div>
+                {% if item.images|length > 1 %}
+                <div class="image-gallery mb-3">
+                    {% for img in item.images %}
+                    <img src="/data/images/{{ img }}"
+                         alt="Bild {{ loop.index }}"
+                         style="width: 60px; height: 60px; object-fit: cover; border-radius: 4px; border: 1px solid #444;">
+                    {% endfor %}
+                </div>
+                {% endif %}
+                {% endif %}
+
+                <table class="table table-dark table-sm mb-0">
+                    <tr>
+                        <td class="text-muted">Titel</td>
+                        <td>{{ item.confirmed_title or '-' }}</td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">Hersteller</td>
+                        <td>{{ item.ai_manufacturer or '-' }}</td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">Modell</td>
+                        <td>{{ item.ai_model or '-' }}</td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">Kategorie</td>
+                        <td>{{ item.ai_category or '-' }}</td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">Zustand</td>
+                        <td>{{ item.ai_condition or '-' }}</td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">Gewicht</td>
+                        <td>{{ (item.weight_g|string + ' g') if item.weight_g else '-' }}</td>
+                    </tr>
+                </table>
+            </div>
+            <div class="card-footer">
+                <a href="/identify/{{ item.id }}" class="btn btn-outline-secondary btn-sm w-100">
+                    <i class="bi bi-arrow-left"></i> Zurueck zur Identifikation
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right column: research -->
+    <div class="col-lg-8">
+
+        <!-- Research button -->
+        <div class="card bg-dark border-secondary mb-3">
+            <div class="card-body text-center">
+                <button id="btn-research" class="btn btn-primary btn-lg" onclick="runResearch()">
+                    <i class="bi bi-search"></i> Preise recherchieren
+                </button>
+                <p class="text-muted small mt-2 mb-0">
+                    Sucht aktive und verkaufte Angebote auf eBay.de und berechnet Preisvorschlaege.
+                    {% if not ebay_auth_configured %}
+                    <br><span class="text-warning"><i class="bi bi-exclamation-triangle"></i> eBay API nicht konfiguriert -- nur Scraper-Ergebnisse.</span>
+                    {% endif %}
+                </p>
+            </div>
+        </div>
+
+        <!-- Results section -->
+        <div id="results-section" {% if not research_results %}style="display:none;"{% endif %}>
+
+            <!-- Price statistics -->
+            <div class="row g-3 mb-3">
+                <div class="col-md-6">
+                    <div class="card bg-dark border-secondary h-100">
+                        <div class="card-header">
+                            <i class="bi bi-graph-up"></i> Preisstatistik
+                        </div>
+                        <div class="card-body">
+                            <table class="table table-dark table-sm mb-0" id="stats-table">
+                                <tr>
+                                    <td class="text-muted">Verkauft</td>
+                                    <td id="stat-sold-count">{{ suggestions.sold_count if suggestions else '-' }}</td>
+                                </tr>
+                                <tr>
+                                    <td class="text-muted">Aktive Angebote</td>
+                                    <td id="stat-active-count">{{ suggestions.active_count if suggestions else '-' }}</td>
+                                </tr>
+                                <tr>
+                                    <td class="text-muted">Verkaufspreis (Schnitt)</td>
+                                    <td id="stat-sold-avg" class="text-success fw-bold">{{ ('%.2f EUR'|format(suggestions.sold_avg)) if suggestions and suggestions.sold_avg else '-' }}</td>
+                                </tr>
+                                <tr>
+                                    <td class="text-muted">Verkaufspreis (Median)</td>
+                                    <td id="stat-sold-median">{{ ('%.2f EUR'|format(suggestions.sold_median)) if suggestions and suggestions.sold_median else '-' }}</td>
+                                </tr>
+                                <tr>
+                                    <td class="text-muted">Aktive Preise (Schnitt)</td>
+                                    <td id="stat-active-avg">{{ ('%.2f EUR'|format(suggestions.active_avg)) if suggestions and suggestions.active_avg else '-' }}</td>
+                                </tr>
+                                <tr>
+                                    <td class="text-muted">Min / Max</td>
+                                    <td id="stat-minmax">{{ ('%.2f / %.2f EUR'|format(suggestions.min_price, suggestions.max_price)) if suggestions else '-' }}</td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-6">
+                    <div class="card bg-dark border-secondary h-100">
+                        <div class="card-header">
+                            <i class="bi bi-truck"></i> Versandkosten
+                        </div>
+                        <div class="card-body" id="shipping-card-body">
+                            {% if shipping %}
+                            <p class="mb-1"><strong>{{ shipping.service }}</strong></p>
+                            <p class="price-suggestion text-info mb-1">{{ '%.2f EUR'|format(shipping.cost) }}</p>
+                            <p class="text-muted small mb-0">Gewicht: {{ shipping.weight_g }} g</p>
+                            {% else %}
+                            <p class="text-muted mb-0">
+                                {% if item.weight_g %}
+                                Versandkosten werden nach der Recherche berechnet.
+                                {% else %}
+                                <i class="bi bi-exclamation-triangle"></i> Kein Gewicht angegeben --
+                                <a href="/identify/{{ item.id }}">bitte Gewicht eintragen</a>.
+                                {% endif %}
+                            </p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Price suggestions -->
+            <div class="row g-3 mb-3">
+                <div class="col-md-6">
+                    <div class="card bg-dark border-warning h-100">
+                        <div class="card-header text-warning">
+                            <i class="bi bi-hammer"></i> Auktion starten ab <small class="text-muted">(Verkaufsschnitt -10%)</small>
+                        </div>
+                        <div class="card-body text-center">
+                            <div class="price-suggestion text-warning" id="suggestion-auction">
+                                {{ ('EUR %.2f'|format(suggestions.suggested_auction_start)) if suggestions and suggestions.suggested_auction_start else '-' }}
+                            </div>
+                            {% if suggestions and suggestions.suggested_total_auction %}
+                            <div class="text-muted small" id="suggestion-auction-total">
+                                inkl. Versand: EUR {{ '%.2f'|format(suggestions.suggested_total_auction) }}
+                            </div>
+                            {% else %}
+                            <div class="text-muted small" id="suggestion-auction-total"></div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card bg-dark border-success h-100">
+                        <div class="card-header text-success">
+                            <i class="bi bi-cart-check"></i> Sofortkauf <small class="text-muted">(Verkaufsschnitt +25%)</small>
+                        </div>
+                        <div class="card-body text-center">
+                            <div class="price-suggestion text-success" id="suggestion-fixed">
+                                {{ ('EUR %.2f'|format(suggestions.suggested_fixed_price)) if suggestions and suggestions.suggested_fixed_price else '-' }}
+                            </div>
+                            {% if suggestions and suggestions.suggested_total_fixed %}
+                            <div class="text-muted small" id="suggestion-fixed-total">
+                                inkl. Versand: EUR {{ '%.2f'|format(suggestions.suggested_total_fixed) }}
+                            </div>
+                            {% else %}
+                            <div class="text-muted small" id="suggestion-fixed-total"></div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Listings table -->
+            <div class="card bg-dark border-secondary mb-3">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-list-ul"></i> Gefundene Angebote</span>
+                    <span class="badge bg-secondary" id="results-count">{{ research_results|length if research_results else 0 }}</span>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-dark table-hover table-sm mb-0">
+                            <thead>
+                                <tr>
+                                    <th style="width:40px;">Quelle</th>
+                                    <th>Titel</th>
+                                    <th style="width:100px;">Preis</th>
+                                    <th style="width:100px;">Typ</th>
+                                    <th style="width:60px;">Verkauft</th>
+                                    <th style="width:50px;">Link</th>
+                                </tr>
+                            </thead>
+                            <tbody id="results-tbody">
+                                {% if research_results %}
+                                {% for r in research_results %}
+                                <tr>
+                                    <td>
+                                        {% if r.source == 'browse_api' %}
+                                        <i class="bi bi-cloud-arrow-down text-info" title="Browse API"></i>
+                                        {% else %}
+                                        <i class="bi bi-globe text-warning" title="Scraper"></i>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-truncate" style="max-width: 300px;" title="{{ r.title }}">{{ r.title }}</td>
+                                    <td>{{ ('%.2f EUR'|format(r.price)) if r.price else '-' }}</td>
+                                    <td>
+                                        {% if r.price_type == 'auction' %}
+                                        <span class="badge bg-warning text-dark">Auktion</span>
+                                        {% else %}
+                                        <span class="badge bg-info text-dark">Sofortkauf</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center">
+                                        {% if r.sold %}
+                                        <i class="bi bi-check-circle-fill text-success" title="Verkauft"></i>
+                                        {% else %}
+                                        <i class="bi bi-dash text-muted" title="Aktiv"></i>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if r.url %}
+                                        <a href="{{ r.url }}" target="_blank" rel="noopener" class="text-decoration-none">
+                                            <i class="bi bi-box-arrow-up-right"></i>
+                                        </a>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Action buttons -->
+            <div class="d-grid gap-2">
+                <a id="btn-create-listing" href="/listing/{{ item.id }}/create" class="btn btn-success btn-lg">
+                    <i class="bi bi-tags"></i> Listing erstellen
+                </a>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<!-- Spinner overlay -->
+<div id="spinner-overlay" class="spinner-overlay">
+    <div class="text-center">
+        <div class="spinner-border text-light" style="width:3rem;height:3rem;" role="status"></div>
+        <div class="spinner-message text-light mt-3">Preise werden recherchiert...</div>
+    </div>
+</div>
+
+<!-- Toast container -->
+<div id="toast-container" class="toast-container position-fixed top-0 end-0 p-3"></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function runResearch() {
+    var btn = document.getElementById('btn-research');
+    btn.disabled = true;
+    showSpinner('Preise werden recherchiert... Dies kann bis zu 1 Minute dauern.');
+
+    try {
+        var response = await fetch('/research/{{ item.id }}/run', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'}
+        });
+
+        if (!response.ok) {
+            var err = await response.json().catch(function() { return {detail: response.statusText}; });
+            throw new Error(err.detail || 'Recherche fehlgeschlagen');
+        }
+
+        var data = await response.json();
+
+        /* Show API warning if applicable */
+        if (data.api_error) {
+            showToast(data.api_error, 'warning');
+        }
+
+        /* Populate results table */
+        var tbody = document.getElementById('results-tbody');
+        tbody.innerHTML = '';
+
+        if (data.results && data.results.length > 0) {
+            data.results.forEach(function(r) {
+                var row = document.createElement('tr');
+
+                /* Source icon */
+                var sourceIcon;
+                if (r.source === 'browse_api') {
+                    sourceIcon = '<i class="bi bi-cloud-arrow-down text-info" title="Browse API"></i>';
+                } else {
+                    sourceIcon = '<i class="bi bi-globe text-warning" title="Scraper"></i>';
+                }
+
+                /* Price type badge */
+                var typeBadge;
+                if (r.price_type === 'auction') {
+                    typeBadge = '<span class="badge bg-warning text-dark">Auktion</span>';
+                } else {
+                    typeBadge = '<span class="badge bg-info text-dark">Sofortkauf</span>';
+                }
+
+                /* Sold checkmark */
+                var soldIcon;
+                if (r.sold) {
+                    soldIcon = '<i class="bi bi-check-circle-fill text-success" title="Verkauft"></i>';
+                } else {
+                    soldIcon = '<i class="bi bi-dash text-muted" title="Aktiv"></i>';
+                }
+
+                /* Link */
+                var linkHtml = '';
+                if (r.url) {
+                    linkHtml = '<a href="' + r.url + '" target="_blank" rel="noopener" class="text-decoration-none"><i class="bi bi-box-arrow-up-right"></i></a>';
+                }
+
+                /* Price */
+                var priceStr = r.price ? r.price.toFixed(2) + ' EUR' : '-';
+
+                /* Escape title for safe display */
+                var titleSpan = document.createElement('span');
+                titleSpan.textContent = r.title;
+                var safeTitle = titleSpan.innerHTML;
+
+                row.innerHTML =
+                    '<td>' + sourceIcon + '</td>' +
+                    '<td class="text-truncate" style="max-width:300px;" title="' + safeTitle + '">' + safeTitle + '</td>' +
+                    '<td>' + priceStr + '</td>' +
+                    '<td>' + typeBadge + '</td>' +
+                    '<td class="text-center">' + soldIcon + '</td>' +
+                    '<td>' + linkHtml + '</td>';
+
+                tbody.appendChild(row);
+            });
+        }
+
+        /* Update results count */
+        document.getElementById('results-count').textContent = data.total_results || 0;
+
+        /* Update statistics */
+        var s = data.suggestions;
+        if (s) {
+            document.getElementById('stat-sold-count').textContent = s.sold_count || 0;
+            document.getElementById('stat-active-count').textContent = s.active_count || 0;
+            document.getElementById('stat-sold-avg').textContent = s.sold_avg > 0 ? s.sold_avg.toFixed(2) + ' EUR' : '-';
+            document.getElementById('stat-sold-median').textContent = s.sold_median > 0 ? s.sold_median.toFixed(2) + ' EUR' : '-';
+            document.getElementById('stat-active-avg').textContent = s.active_avg > 0 ? s.active_avg.toFixed(2) + ' EUR' : '-';
+            document.getElementById('stat-minmax').textContent = s.sample_size > 0 ? s.min_price.toFixed(2) + ' / ' + s.max_price.toFixed(2) + ' EUR' : '-';
+
+            /* Suggestions */
+            document.getElementById('suggestion-auction').textContent =
+                s.suggested_auction_start > 0 ? 'EUR ' + s.suggested_auction_start.toFixed(2) : '-';
+            document.getElementById('suggestion-fixed').textContent =
+                s.suggested_fixed_price > 0 ? 'EUR ' + s.suggested_fixed_price.toFixed(2) : '-';
+
+            /* Totals incl. shipping */
+            var auctionTotal = document.getElementById('suggestion-auction-total');
+            var fixedTotal = document.getElementById('suggestion-fixed-total');
+            if (s.suggested_total_auction) {
+                auctionTotal.textContent = 'inkl. Versand: EUR ' + s.suggested_total_auction.toFixed(2);
+            } else {
+                auctionTotal.textContent = '';
+            }
+            if (s.suggested_total_fixed) {
+                fixedTotal.textContent = 'inkl. Versand: EUR ' + s.suggested_total_fixed.toFixed(2);
+            } else {
+                fixedTotal.textContent = '';
+            }
+        }
+
+        /* Update shipping card */
+        var shippingBody = document.getElementById('shipping-card-body');
+        if (data.shipping && data.shipping.cost > 0) {
+            shippingBody.innerHTML =
+                '<p class="mb-1"><strong>' + data.shipping.service + '</strong></p>' +
+                '<p class="price-suggestion text-info mb-1">' + data.shipping.cost.toFixed(2) + ' EUR</p>' +
+                '<p class="text-muted small mb-0">Gewicht: ' + data.shipping.weight_g + ' g</p>';
+        } else if (data.shipping && data.shipping.error) {
+            shippingBody.innerHTML =
+                '<p class="text-danger mb-0"><i class="bi bi-exclamation-triangle"></i> ' + data.shipping.error + '</p>';
+        }
+
+        /* Show results section */
+        document.getElementById('results-section').style.display = '';
+
+        var msgParts = [];
+        if (data.total_results > 0) {
+            msgParts.push(data.total_results + ' Angebote gefunden');
+        } else {
+            msgParts.push('Keine Angebote gefunden');
+        }
+        showToast(msgParts.join(', '), data.total_results > 0 ? 'success' : 'warning');
+
+    } catch (e) {
+        showToast('Fehler: ' + e.message, 'danger');
+    } finally {
+        hideSpinner();
+        btn.disabled = false;
+    }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,640 @@
+{% extends "base.html" %}
+
+{% set active_page = 'listing' %}
+
+{% block title %}Listing erstellen - Artikel #{{ item.id }} - IceSeller{% endblock %}
+
+{% block content %}
+<div class="row g-3">
+
+    <!-- Left column: item summary -->
+    <div class="col-lg-4">
+        <div class="card bg-dark border-secondary">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-box-seam"></i> Artikel #{{ item.id }}</span>
+                <span class="badge status-{{ item.status }}">{{ item.status }}</span>
+            </div>
+            <div class="card-body">
+                {% if item.images %}
+                <div class="text-center mb-3">
+                    <img id="preview-image"
+                         src="/data/images/{{ item.images[0] }}"
+                         alt="Artikelbild"
+                         class="img-fluid rounded"
+                         style="max-height: 200px; object-fit: contain; background: #111;">
+                </div>
+                {% if item.images|length > 1 %}
+                <div class="image-gallery mb-3">
+                    {% for img in item.images %}
+                    <img src="/data/images/{{ img }}"
+                         alt="Bild {{ loop.index }}"
+                         style="width: 60px; height: 60px; object-fit: cover; border-radius: 4px; border: 1px solid #444;">
+                    {% endfor %}
+                </div>
+                {% endif %}
+                {% endif %}
+
+                <table class="table table-dark table-sm mb-0">
+                    <tr>
+                        <td class="text-muted">Titel</td>
+                        <td>{{ item.confirmed_title or '-' }}</td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">Hersteller</td>
+                        <td>{{ item.ai_manufacturer or '-' }}</td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">Modell</td>
+                        <td>{{ item.ai_model or '-' }}</td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">Kategorie</td>
+                        <td>{{ item.ai_category or '-' }}</td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">Zustand (KI)</td>
+                        <td>{{ item.ai_condition or '-' }}</td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">Gewicht</td>
+                        <td>{{ (item.weight_g|string + ' g') if item.weight_g else '-' }}</td>
+                    </tr>
+                </table>
+            </div>
+            <div class="card-footer">
+                <a href="/research/{{ item.id }}" class="btn btn-outline-secondary btn-sm w-100">
+                    <i class="bi bi-arrow-left"></i> Zurueck zur Recherche
+                </a>
+            </div>
+        </div>
+
+        {% if item.ai_specs %}
+        <div class="card bg-dark border-secondary mt-3">
+            <div class="card-header">
+                <i class="bi bi-list-check"></i> Item Specifics (KI)
+            </div>
+            <div class="card-body">
+                <table class="table table-dark table-sm mb-0">
+                    {% for key, val in item.ai_specs.items() %}
+                    {% if val %}
+                    <tr>
+                        <td class="text-muted">{{ key }}</td>
+                        <td>{{ val }}</td>
+                    </tr>
+                    {% endif %}
+                    {% endfor %}
+                </table>
+                <div class="form-text mt-1">
+                    <i class="bi bi-info-circle"></i> Werden automatisch als eBay Item Specifics uebermittelt.
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if suggestions %}
+        <div class="card bg-dark border-secondary mt-3">
+            <div class="card-header">
+                <i class="bi bi-graph-up"></i> Preisvorschlaege
+            </div>
+            <div class="card-body">
+                <table class="table table-dark table-sm mb-0">
+                    <tr>
+                        <td class="text-muted">Auktion ab</td>
+                        <td class="text-warning fw-bold">EUR {{ '%.2f'|format(suggestions.suggested_auction_start) }}</td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">Sofortkauf</td>
+                        <td class="text-success fw-bold">EUR {{ '%.2f'|format(suggestions.suggested_fixed_price) }}</td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">Verkaufsschnitt</td>
+                        <td>EUR {{ '%.2f'|format(suggestions.sold_avg) }} ({{ suggestions.sold_count }} verk.)</td>
+                    </tr>
+                    {% if suggestions.shipping %}
+                    <tr class="border-top border-secondary">
+                        <td class="text-muted">Versand</td>
+                        <td>EUR {{ '%.2f'|format(suggestions.shipping.cost) }}</td>
+                    </tr>
+                    {% if suggestions.suggested_total_auction %}
+                    <tr>
+                        <td class="text-muted">Auktion + Versand</td>
+                        <td class="text-warning">EUR {{ '%.2f'|format(suggestions.suggested_total_auction) }}</td>
+                    </tr>
+                    {% endif %}
+                    {% if suggestions.suggested_total_fixed %}
+                    <tr>
+                        <td class="text-muted">Sofortkauf + Versand</td>
+                        <td class="text-success">EUR {{ '%.2f'|format(suggestions.suggested_total_fixed) }}</td>
+                    </tr>
+                    {% endif %}
+                    {% endif %}
+                </table>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Right column: listing form -->
+    <div class="col-lg-8">
+
+        {% if not ebay_authenticated %}
+        <div class="alert alert-warning d-flex align-items-center" role="alert">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+            <div>
+                <strong>Nicht mit eBay verbunden!</strong> Bitte zuerst
+                <a href="/listing/ebay-auth" class="alert-link">eBay-Authentifizierung</a> durchfuehren,
+                bevor ein Listing erstellt werden kann.
+            </div>
+        </div>
+        {% endif %}
+
+        <form method="post" action="/listing/{{ item.id }}/publish" id="listing-form">
+
+            <!-- Title -->
+            <div class="card bg-dark border-secondary mb-3">
+                <div class="card-header">
+                    <i class="bi bi-type"></i> Titel
+                </div>
+                <div class="card-body">
+                    <input type="text" class="form-control form-control-lg" id="title" name="title"
+                           value="{{ item.confirmed_title or '' }}" maxlength="80"
+                           placeholder="eBay-Titel (max. 80 Zeichen)" required>
+                    <div class="form-text">
+                        <span id="title-counter" class="{{ 'text-danger' if (item.confirmed_title or '')|length > 80 else '' }}">{{ (item.confirmed_title or '')|length }}</span>/80 Zeichen
+                    </div>
+                </div>
+            </div>
+
+            <!-- Description -->
+            <div class="card bg-dark border-secondary mb-3">
+                <div class="card-header">
+                    <i class="bi bi-text-paragraph"></i> Beschreibung
+                </div>
+                <div class="card-body">
+                    <textarea class="form-control" id="description" name="description"
+                              rows="8" placeholder="Ausfuehrliche Artikelbeschreibung..."
+                              required>{{ item.confirmed_description or '' }}</textarea>
+                    <div class="form-text">
+                        <i class="bi bi-info-circle"></i>
+                        Hinweis: &bdquo;Irrtuemer und Zwischenverkauf vorbehalten.&ldquo; wird automatisch angefuegt.
+                    </div>
+                </div>
+            </div>
+
+            <!-- Category & Condition -->
+            <div class="card bg-dark border-secondary mb-3">
+                <div class="card-header">
+                    <i class="bi bi-tag"></i> Kategorie &amp; Zustand
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label for="category_id" class="form-label">eBay-Kategorie</label>
+                            <select class="form-select" id="category_id" name="category_id" required>
+                                <option value="">-- Kategorie waehlen --</option>
+                                {% for cat in categories %}
+                                <option value="{{ cat.categoryId }}" {{ 'selected' if loop.first else '' }}>{{ cat.categoryName }} ({{ cat.categoryId }})</option>
+                                {% endfor %}
+                            </select>
+                            {% if not categories %}
+                            <div class="form-text text-warning">
+                                <i class="bi bi-info-circle"></i> Keine Kategorievorschlaege verfuegbar.
+                                {% if not ebay_authenticated %}eBay-Verbindung erforderlich.{% endif %}
+                            </div>
+                            {% endif %}
+                        </div>
+                        <div class="col-md-6">
+                            <label for="condition" class="form-label">Zustand</label>
+                            <select class="form-select" id="condition" name="condition" required>
+                                <option value="">-- Zustand waehlen --</option>
+                                {% for value, label in condition_labels.items() %}
+                                <option value="{{ value }}" {{ 'selected' if value == 'USED_EXCELLENT' else '' }}>{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Format & Price -->
+            <div class="card bg-dark border-secondary mb-3">
+                <div class="card-header">
+                    <i class="bi bi-currency-euro"></i> Format &amp; Preis
+                </div>
+                <div class="card-body">
+                    <!-- Format radio buttons -->
+                    <div class="mb-3">
+                        <label class="form-label">Angebotsformat</label>
+                        <div class="d-flex gap-4">
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="format" id="format-auction"
+                                       value="AUCTION" onchange="togglePriceFields()">
+                                <label class="form-check-label" for="format-auction">
+                                    <i class="bi bi-hammer"></i> Auktion
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="format" id="format-fixed"
+                                       value="FIXED_PRICE" checked onchange="togglePriceFields()">
+                                <label class="form-check-label" for="format-fixed">
+                                    <i class="bi bi-cart-check"></i> Sofortkauf
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row g-3">
+                        <!-- Start price (auction) -->
+                        <div class="col-md-6" id="start-price-group" style="display: none;">
+                            <label for="start_price" class="form-label">Startpreis (EUR)</label>
+                            <div class="input-group">
+                                <span class="input-group-text">EUR</span>
+                                <input type="number" class="form-control" id="start_price" name="start_price"
+                                       value="{{ '%.2f'|format(suggestions.suggested_auction_start) if suggestions and suggestions.suggested_auction_start else '1.00' }}"
+                                       min="0.01" step="0.01">
+                            </div>
+                            {% if suggestions and suggestions.suggested_auction_start %}
+                            <div class="form-text text-warning">
+                                Vorschlag: EUR {{ '%.2f'|format(suggestions.suggested_auction_start) }}
+                            </div>
+                            {% endif %}
+                        </div>
+
+                        <!-- Buy now price (fixed price) -->
+                        <div class="col-md-6" id="buy-now-price-group">
+                            <label for="buy_now_price" class="form-label">Sofortkauf-Preis (EUR)</label>
+                            <div class="input-group">
+                                <span class="input-group-text">EUR</span>
+                                <input type="number" class="form-control" id="buy_now_price" name="buy_now_price"
+                                       value="{{ '%.2f'|format(suggestions.suggested_fixed_price) if suggestions and suggestions.suggested_fixed_price else '9.99' }}"
+                                       min="0.01" step="0.01"
+                                       oninput="updateBestOfferInfo()">
+                            </div>
+                            {% if suggestions and suggestions.suggested_fixed_price %}
+                            <div class="form-text text-success">
+                                Vorschlag: EUR {{ '%.2f'|format(suggestions.suggested_fixed_price) }}
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <!-- Best Offer (fixed-price only) -->
+                    <div class="mt-3" id="best-offer-group">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="best_offer" name="best_offer"
+                                   checked onchange="updateBestOfferInfo()">
+                            <label class="form-check-label" for="best_offer">
+                                <i class="bi bi-hand-thumbs-up"></i> Preisvorschlag zulassen
+                            </label>
+                        </div>
+                        <div id="best-offer-info" class="form-text mt-1">
+                            <i class="bi bi-info-circle"></i>
+                            Auto-Akzeptieren ab <strong id="bo-accept">--</strong> EUR (90%),
+                            Auto-Ablehnen unter <strong id="bo-decline">--</strong> EUR (70%)
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Duration & Timing -->
+            <div class="card bg-dark border-secondary mb-3">
+                <div class="card-header">
+                    <i class="bi bi-clock"></i> Laufzeit &amp; Zeitplanung
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label for="duration" class="form-label">Laufzeit</label>
+                            <select class="form-select" id="duration" name="duration" onchange="updateTimingInfo()">
+                                {% for value, label in duration_options %}
+                                <option value="{{ value }}" {{ 'selected' if value == 'DAYS_7' else '' }}>{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-4" id="schedule-group">
+                            <label class="form-label">Startmodus</label>
+                            <select class="form-select" id="schedule_mode" name="schedule_mode" onchange="updateTimingInfo()">
+                                <option value="now">Sofort einstellen</option>
+                                <option value="timed">Sonntag 19:00 Uhr</option>
+                                <option value="custom">Benutzerdefiniert</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4" id="custom-datetime-group" style="display:none;">
+                            <label for="schedule_datetime" class="form-label">Start am</label>
+                            <input type="datetime-local" class="form-control" id="schedule_datetime"
+                                   name="schedule_datetime" onchange="updateTimingInfo()">
+                        </div>
+                    </div>
+                    <div id="timing-info" class="mt-2">
+                        <div class="alert alert-info py-2 mb-0" id="timing-display" style="display:none;">
+                            <i class="bi bi-calendar-event"></i>
+                            <strong>Start:</strong> <span id="timing-start">--</span>
+                            &nbsp;&rarr;&nbsp;
+                            <strong>Ende:</strong> <span id="timing-end">--</span>
+                        </div>
+                    </div>
+                    <div class="form-text mt-1" id="timing-hint">
+                        <i class="bi bi-lightbulb"></i>
+                        Auktionen die Sonntag Abend enden erzielen die hoechsten Preise auf ebay.de.
+                    </div>
+                </div>
+            </div>
+
+            <!-- Shipping -->
+            <div class="card bg-dark border-secondary mb-3">
+                <div class="card-header">
+                    <i class="bi bi-truck"></i> Versand
+                </div>
+                <div class="card-body">
+                    {% if shipping_total %}
+                    <table class="table table-dark table-sm mb-2">
+                        <tr>
+                            <td class="text-muted">DHL-Service</td>
+                            <td>{{ shipping_total.service }}</td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">DHL-Porto</td>
+                            <td>EUR {{ '%.2f'|format(shipping_total.dhl_cost) }}</td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">Verpackung</td>
+                            <td>EUR {{ '%.2f'|format(shipping_total.packaging) }}</td>
+                        </tr>
+                        <tr class="border-top border-secondary">
+                            <td class="fw-bold">Versandkosten (gerundet)</td>
+                            <td class="fw-bold text-info">EUR {{ '%.2f'|format(shipping_total.total) }}</td>
+                        </tr>
+                    </table>
+                    <input type="hidden" name="shipping_cost" value="{{ shipping_total.total }}">
+                    <div class="form-text">
+                        <i class="bi bi-info-circle"></i>
+                        DHL {{ '%.2f'|format(shipping_total.dhl_cost) }} + {{ '%.2f'|format(shipping_total.packaging) }} Verpackung = {{ '%.2f'|format(shipping_total.dhl_cost + shipping_total.packaging) }}, aufgerundet auf {{ '%.0f'|format(shipping_total.total) }} EUR
+                    </div>
+                    {% else %}
+                    <div class="text-warning">
+                        <i class="bi bi-exclamation-triangle"></i>
+                        Kein Gewicht angegeben - Versandkosten koennen nicht berechnet werden.
+                    </div>
+                    <div class="mt-2">
+                        <label for="shipping_cost_manual" class="form-label">Versandkosten manuell (EUR)</label>
+                        <div class="input-group">
+                            <span class="input-group-text">EUR</span>
+                            <input type="number" class="form-control" name="shipping_cost" id="shipping_cost_manual"
+                                   value="5.00" min="0" step="1.00">
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Return policy -->
+            <div class="card bg-dark border-secondary mb-3">
+                <div class="card-header">
+                    <i class="bi bi-arrow-return-left"></i> Ruecknahme
+                </div>
+                <div class="card-body">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="bi bi-check-circle text-success"></i>
+                        <span>30 Tage Ruecknahme &mdash; Kaeufer zahlt Ruecksendung</span>
+                    </div>
+                    <div class="form-text mt-1">
+                        Top Rated Plus: 30 Tage = 10% Gebuehrenrabatt + hoehere Sichtbarkeit.
+                    </div>
+                </div>
+            </div>
+
+            <!-- Image preview -->
+            {% if item.images %}
+            <div class="card bg-dark border-secondary mb-3">
+                <div class="card-header">
+                    <i class="bi bi-images"></i> Bilder ({{ item.images|length }})
+                </div>
+                <div class="card-body">
+                    <div class="image-gallery">
+                        {% for img in item.images %}
+                        <img src="/data/images/{{ img }}"
+                             alt="Bild {{ loop.index }}"
+                             style="width: 100px; height: 100px; object-fit: cover; border-radius: 4px; border: 1px solid #444;">
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Submit -->
+            <div class="d-grid">
+                <button type="submit" class="btn btn-success btn-lg" id="btn-publish"
+                        {{ 'disabled' if not ebay_authenticated else '' }}>
+                    <i class="bi bi-tags-fill" id="btn-icon"></i>
+                    <span id="btn-text">Auf eBay einstellen</span>
+                </button>
+            </div>
+
+        </form>
+    </div>
+</div>
+
+<!-- Spinner overlay -->
+<div id="spinner-overlay" class="spinner-overlay">
+    <div class="text-center">
+        <div class="spinner-border text-light" style="width:3rem;height:3rem;" role="status"></div>
+        <div class="spinner-message text-light mt-3">Listing wird erstellt...</div>
+    </div>
+</div>
+
+<!-- Toast container -->
+<div id="toast-container" class="toast-container position-fixed top-0 end-0 p-3"></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+/* Title character counter */
+var titleInput = document.getElementById('title');
+var titleCounter = document.getElementById('title-counter');
+if (titleInput && titleCounter) {
+    titleInput.addEventListener('input', function() {
+        titleCounter.textContent = this.value.length;
+        if (this.value.length > 80) {
+            titleCounter.classList.add('text-danger');
+        } else {
+            titleCounter.classList.remove('text-danger');
+        }
+    });
+}
+
+/* Toggle price fields based on format selection */
+function togglePriceFields() {
+    var isAuction = document.getElementById('format-auction').checked;
+    var startPriceGroup = document.getElementById('start-price-group');
+    var buyNowGroup = document.getElementById('buy-now-price-group');
+    var bestOfferGroup = document.getElementById('best-offer-group');
+
+    if (isAuction) {
+        startPriceGroup.style.display = '';
+        buyNowGroup.querySelector('label').textContent = 'Sofortkauf-Preis (EUR, optional)';
+        document.getElementById('buy_now_price').removeAttribute('required');
+        bestOfferGroup.style.display = 'none';
+    } else {
+        startPriceGroup.style.display = 'none';
+        buyNowGroup.querySelector('label').textContent = 'Sofortkauf-Preis (EUR)';
+        bestOfferGroup.style.display = '';
+    }
+    updateTimingInfo();
+    updateBestOfferInfo();
+}
+
+/* Update Best Offer threshold display */
+function updateBestOfferInfo() {
+    var price = parseFloat(document.getElementById('buy_now_price').value) || 0;
+    var checked = document.getElementById('best_offer').checked;
+    var info = document.getElementById('best-offer-info');
+    if (checked && price > 0) {
+        document.getElementById('bo-accept').textContent = Math.ceil(price * 0.9).toFixed(0);
+        document.getElementById('bo-decline').textContent = Math.ceil(price * 0.7).toFixed(0);
+        info.style.display = '';
+    } else {
+        info.style.display = 'none';
+    }
+}
+
+/* Duration days lookup */
+var DURATION_DAYS = {
+    'DAYS_3': 3, 'DAYS_5': 5, 'DAYS_7': 7, 'DAYS_10': 10, 'DAYS_30': 30, 'GTC': 0
+};
+
+/* Format date for display */
+function fmtDate(d) {
+    var days = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
+    return days[d.getDay()] + ' ' + String(d.getDate()).padStart(2,'0') + '.'
+           + String(d.getMonth()+1).padStart(2,'0') + '. '
+           + String(d.getHours()).padStart(2,'0') + ':'
+           + String(d.getMinutes()).padStart(2,'0') + ' Uhr';
+}
+
+/* Calculate next Sunday 19:00 end time and work backwards */
+function calcSundayTiming(durationDays) {
+    var now = new Date();
+    var end = new Date(now);
+    end.setHours(19, 0, 0, 0);
+    /* advance to next Sunday */
+    var daysToSun = (7 - end.getDay()) % 7;
+    if (daysToSun === 0 && end <= now) daysToSun = 7;
+    end.setDate(end.getDate() + daysToSun);
+    /* publish = end - duration */
+    var pub = new Date(end.getTime() - durationDays * 86400000);
+    while (pub <= now) {
+        end.setDate(end.getDate() + 7);
+        pub = new Date(end.getTime() - durationDays * 86400000);
+    }
+    return { publish: pub, end: end };
+}
+
+/* Update timing info display and button text */
+function updateTimingInfo() {
+    var mode = document.getElementById('schedule_mode').value;
+    var customGroup = document.getElementById('custom-datetime-group');
+    var timingDisplay = document.getElementById('timing-display');
+    var timingStart = document.getElementById('timing-start');
+    var timingEnd = document.getElementById('timing-end');
+    var btnText = document.getElementById('btn-text');
+    var btnIcon = document.getElementById('btn-icon');
+    var durationSel = document.getElementById('duration');
+    var durationKey = durationSel.value;
+    var durationDays = DURATION_DAYS[durationKey] || 7;
+
+    customGroup.style.display = (mode === 'custom') ? '' : 'none';
+
+    if (mode === 'now') {
+        /* Sofort: show start=jetzt, end=jetzt+duration */
+        var now = new Date();
+        var endNow = new Date(now.getTime() + durationDays * 86400000);
+        if (durationDays > 0) {
+            timingDisplay.style.display = '';
+            timingStart.textContent = 'Jetzt';
+            timingEnd.textContent = fmtDate(endNow);
+        } else {
+            /* GTC */
+            timingDisplay.style.display = '';
+            timingStart.textContent = 'Jetzt';
+            timingEnd.textContent = 'Bis auf Widerruf';
+        }
+        btnText.textContent = 'Auf eBay einstellen';
+        btnIcon.className = 'bi bi-tags-fill';
+
+    } else if (mode === 'timed') {
+        if (durationDays > 0) {
+            var t = calcSundayTiming(durationDays);
+            timingDisplay.style.display = '';
+            timingStart.textContent = fmtDate(t.publish);
+            timingEnd.textContent = fmtDate(t.end);
+        } else {
+            timingDisplay.style.display = '';
+            timingStart.textContent = 'So 19:00';
+            timingEnd.textContent = 'Bis auf Widerruf';
+        }
+        btnText.textContent = 'Auktion planen (Sonntag 19:00)';
+        btnIcon.className = 'bi bi-calendar-check';
+
+    } else if (mode === 'custom') {
+        var dtInput = document.getElementById('schedule_datetime');
+        if (dtInput.value) {
+            var pubDate = new Date(dtInput.value);
+            if (durationDays > 0) {
+                var endDate = new Date(pubDate.getTime() + durationDays * 86400000);
+                timingDisplay.style.display = '';
+                timingStart.textContent = fmtDate(pubDate);
+                timingEnd.textContent = fmtDate(endDate);
+            } else {
+                timingDisplay.style.display = '';
+                timingStart.textContent = fmtDate(pubDate);
+                timingEnd.textContent = 'Bis auf Widerruf';
+            }
+        } else {
+            timingDisplay.style.display = 'none';
+        }
+        btnText.textContent = 'Auktion planen';
+        btnIcon.className = 'bi bi-calendar-check';
+    }
+}
+
+/* Show spinner on form submit */
+var listingForm = document.getElementById('listing-form');
+if (listingForm) {
+    listingForm.addEventListener('submit', function(e) {
+        var mode = document.getElementById('schedule_mode').value;
+        if (mode === 'custom') {
+            var dtVal = document.getElementById('schedule_datetime').value;
+            if (!dtVal) {
+                e.preventDefault();
+                alert('Bitte Datum und Uhrzeit angeben.');
+                return;
+            }
+        }
+        var btn = document.getElementById('btn-publish');
+        if (btn) btn.disabled = true;
+        if (mode === 'timed' || mode === 'custom') {
+            showSpinner('Listing wird geplant...');
+        } else {
+            showSpinner('Listing wird auf eBay erstellt...');
+        }
+    });
+}
+
+/* Initialize: set default datetime to tomorrow 19:00 */
+(function() {
+    var dtInput = document.getElementById('schedule_datetime');
+    if (dtInput) {
+        var tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        tomorrow.setHours(19, 0, 0, 0);
+        dtInput.value = tomorrow.toISOString().slice(0, 16);
+        dtInput.min = new Date().toISOString().slice(0, 16);
+    }
+})();
+
+/* Initialize */
+togglePriceFields();
+updateTimingInfo();
+updateBestOfferInfo();
+</script>
+{% endblock %}

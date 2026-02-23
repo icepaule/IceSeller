@@ -1,0 +1,537 @@
+{% extends "base.html" %}
+
+{% set active_page = 'listing' %}
+
+{% block title %}Listing - Artikel #{{ item.id }} - IceSeller{% endblock %}
+
+{% block content %}
+<div class="row g-3">
+
+    <!-- Left column: item info & images -->
+    <div class="col-lg-4">
+
+        <!-- Internal number (PostIt label) -->
+        <div class="card bg-dark border-warning mb-3">
+            <div class="card-header bg-warning text-dark fw-bold text-center">
+                <i class="bi bi-upc-scan"></i> Interne Nummer
+            </div>
+            <div class="card-body text-center py-4">
+                <div class="fs-1 fw-bold font-monospace" id="internal-number">{{ item.internal_number or 'IS-%d'|format(item.id) }}</div>
+                <div class="text-muted small mt-1">Diese Nummer auf einen Zettel schreiben und auf die Ware kleben</div>
+                <button class="btn btn-outline-warning btn-sm mt-2" onclick="printLabel()">
+                    <i class="bi bi-printer"></i> Label drucken
+                </button>
+            </div>
+        </div>
+
+        <div class="card bg-dark border-secondary">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-box-seam"></i> Artikel #{{ item.id }}</span>
+                <span class="badge status-{{ item.status }}">{{ item.status }}</span>
+            </div>
+            <div class="card-body">
+                {% if item.images %}
+                <div class="text-center mb-3">
+                    <img src="/data/images/{{ item.images[0] }}"
+                         alt="Artikelbild"
+                         class="img-fluid rounded"
+                         style="max-height: 200px; object-fit: contain; background: #111;">
+                </div>
+                {% if item.images|length > 1 %}
+                <div class="image-gallery mb-3">
+                    {% for img in item.images %}
+                    <img src="/data/images/{{ img }}"
+                         alt="Bild {{ loop.index }}"
+                         style="width: 60px; height: 60px; object-fit: cover; border-radius: 4px; border: 1px solid #444;">
+                    {% endfor %}
+                </div>
+                {% endif %}
+                {% endif %}
+
+                {% if listing.status == 'scheduled' %}
+                <input type="text" class="form-control mb-2 fw-bold" name="title" form="update-scheduled-form"
+                       value="{{ item.confirmed_title or '' }}" maxlength="80" required>
+                <textarea class="form-control text-muted small" name="description" form="update-scheduled-form"
+                          rows="5" required>{{ item.confirmed_description or '' }}</textarea>
+                {% else %}
+                <h5 class="card-title">{{ item.confirmed_title or 'Ohne Titel' }}</h5>
+                <p class="card-text text-muted small">{{ item.confirmed_description[:200] + '...' if item.confirmed_description and item.confirmed_description|length > 200 else item.confirmed_description or '' }}</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Timeline -->
+        <div class="card bg-dark border-secondary mt-3">
+            <div class="card-header">
+                <i class="bi bi-clock-history"></i> Verlauf
+            </div>
+            <div class="card-body">
+                {% if timeline %}
+                <ul class="list-unstyled mb-0">
+                    {% for event in timeline %}
+                    <li class="d-flex align-items-start mb-3 {{ 'mb-0' if loop.last else '' }}">
+                        <i class="bi {{ event.icon }} text-{{ event.color }} me-2 mt-1"></i>
+                        <div>
+                            <div>{{ event.text }}</div>
+                            <small class="text-muted">{{ event.date.strftime('%d.%m.%Y %H:%M') }}</small>
+                        </div>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <p class="text-muted mb-0">Keine Ereignisse vorhanden.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Right column: listing details -->
+    <div class="col-lg-8">
+
+        <!-- Listing status -->
+        <div class="card bg-dark border-secondary mb-3">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-tags"></i> eBay Listing</span>
+                <span class="badge status-{{ listing.status }} fs-6">{{ listing.status }}</span>
+            </div>
+            <div class="card-body">
+                <table class="table table-dark table-sm mb-0">
+                    <tr>
+                        <td class="text-muted" style="width: 180px;">Interne Nr.</td>
+                        <td><span class="badge bg-warning text-dark fw-bold font-monospace">{{ item.internal_number or 'IS-%d'|format(item.id) }}</span></td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">Listing-ID</td>
+                        <td>
+                            {% if listing.ebay_listing_id %}
+                            <code>{{ listing.ebay_listing_id }}</code>
+                            {% else %}
+                            <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">SKU</td>
+                        <td><code>{{ listing.ebay_sku or '-' }}</code></td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">Format</td>
+                        <td>
+                            {% if listing.format == 'AUCTION' %}
+                            <span class="badge bg-warning text-dark"><i class="bi bi-hammer"></i> Auktion</span>
+                            {% else %}
+                            <span class="badge bg-info text-dark"><i class="bi bi-cart-check"></i> Sofortkauf</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">Kategorie</td>
+                        <td>{{ listing.category_id or '-' }}</td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">Eingestellt am</td>
+                        <td>{{ listing.listed_at.strftime('%d.%m.%Y %H:%M') if listing.listed_at else '-' }}</td>
+                    </tr>
+                    {% if listing.ended_at %}
+                    <tr>
+                        <td class="text-muted">Beendet am</td>
+                        <td>{{ listing.ended_at.strftime('%d.%m.%Y %H:%M') }}</td>
+                    </tr>
+                    {% endif %}
+                </table>
+            </div>
+        </div>
+
+        <!-- Stats cards -->
+        <div class="row g-3 mb-3">
+            <div class="col-6 col-md-3">
+                <div class="card bg-dark border-secondary text-center h-100">
+                    <div class="card-body py-3">
+                        <div class="text-muted small mb-1"><i class="bi bi-eye"></i> Aufrufe</div>
+                        <div class="fs-3 fw-bold">{{ listing.views or 0 }}</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="card bg-dark border-secondary text-center h-100">
+                    <div class="card-body py-3">
+                        <div class="text-muted small mb-1"><i class="bi bi-heart"></i> Beobachter</div>
+                        <div class="fs-3 fw-bold">{{ listing.watchers or 0 }}</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="card bg-dark border-secondary text-center h-100">
+                    <div class="card-body py-3">
+                        <div class="text-muted small mb-1">
+                            {% if listing.format == 'AUCTION' %}
+                            <i class="bi bi-hammer"></i> Gebote
+                            {% else %}
+                            <i class="bi bi-tag"></i> Preis
+                            {% endif %}
+                        </div>
+                        <div class="fs-3 fw-bold">
+                            {% if listing.format == 'AUCTION' %}
+                            {{ listing.bids or 0 }}
+                            {% else %}
+                            {{ '%.2f'|format(listing.buy_now_price) if listing.buy_now_price else '-' }}
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="card bg-dark border-success text-center h-100">
+                    <div class="card-body py-3">
+                        <div class="text-muted small mb-1"><i class="bi bi-currency-euro"></i> Aktueller Preis</div>
+                        <div class="fs-3 fw-bold text-success">
+                            {% if listing.current_price %}
+                            {{ '%.2f'|format(listing.current_price) }}
+                            {% else %}
+                            -
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- eBay link -->
+        {% if ebay_url %}
+        <div class="card bg-dark border-secondary mb-3">
+            <div class="card-body text-center">
+                <a href="{{ ebay_url }}" target="_blank" rel="noopener" class="btn btn-outline-primary btn-lg">
+                    <i class="bi bi-box-arrow-up-right"></i> Auf eBay ansehen
+                </a>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Schedule editing (only for scheduled listings) -->
+        {% if listing.status == 'scheduled' %}
+        <form method="post" action="/listing/{{ item.id }}/update-scheduled" id="update-scheduled-form">
+        <div class="card bg-dark border-info mb-3">
+            <div class="card-header">
+                <i class="bi bi-calendar-event text-info"></i> Geplante Veroeffentlichung bearbeiten
+            </div>
+            <div class="card-body">
+                <div class="row g-3 align-items-end">
+                    <div class="col-md-6">
+                        <label for="schedule_datetime" class="form-label">Startzeitpunkt</label>
+                        <input type="datetime-local" class="form-control" id="schedule_datetime" name="schedule_datetime"
+                               value="{{ schedule_publish_at or '' }}" required>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Endzeitpunkt (berechnet)</label>
+                        <div class="form-control bg-secondary text-light" id="calculated-end" style="pointer-events:none;">
+                            --
+                        </div>
+                    </div>
+                </div>
+                <div class="mt-3">
+                    <button type="submit" class="btn btn-info" id="btn-save-scheduled">
+                        <i class="bi bi-check-lg"></i> Aenderungen speichern
+                    </button>
+                    <span class="text-muted small ms-2">Titel &amp; Beschreibung oben links bearbeiten</span>
+                </div>
+            </div>
+        </div>
+        </form>
+        {% endif %}
+
+        <!-- Publish Error -->
+        {% if publish_error %}
+        <div class="card bg-dark border-danger mb-3">
+            <div class="card-header">
+                <i class="bi bi-exclamation-octagon-fill text-danger"></i> Veröffentlichung fehlgeschlagen
+            </div>
+            <div class="card-body">
+                <div class="alert alert-danger mb-0">
+                    <i class="bi bi-exclamation-triangle-fill"></i>
+                    {{ publish_error.detail or 'Unbekannter Fehler' }}
+                </div>
+                {% if publish_error.timestamp %}
+                <small class="text-muted mt-2 d-block">Zeitpunkt: {{ publish_error.timestamp }}</small>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Dry Run Result -->
+        {% if dry_run %}
+        <div class="card bg-dark mb-3 {{ 'border-success' if dry_run.status == 'ok' else 'border-danger' }}">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>
+                    {% if dry_run.status == 'ok' %}
+                    <i class="bi bi-check-circle-fill text-success"></i> Dry Run bestanden
+                    {% else %}
+                    <i class="bi bi-x-circle-fill text-danger"></i> Dry Run fehlgeschlagen
+                    {% endif %}
+                </span>
+                <span class="badge {{ 'bg-success' if dry_run.status == 'ok' else 'bg-danger' }}">VerifyAddItem</span>
+            </div>
+            <div class="card-body">
+                {% if dry_run.status == 'ok' %}
+                    {% if dry_run.fees %}
+                    <table class="table table-dark table-sm mb-0">
+                        {% for fee_name, fee_val in dry_run.fees.items() %}
+                        <tr>
+                            <td class="text-muted" style="width: 250px;">{{ fee_name }}</td>
+                            <td>{{ fee_val }} EUR</td>
+                        </tr>
+                        {% endfor %}
+                    </table>
+                    {% endif %}
+                    {% if dry_run.warnings %}
+                    <div class="mt-2">
+                        {% for w in dry_run.warnings %}
+                        <div class="alert alert-warning py-1 px-2 mb-1 small">
+                            <i class="bi bi-exclamation-triangle"></i> {{ w }}
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                    {% if not dry_run.fees and not dry_run.warnings %}
+                    <p class="text-success mb-0"><i class="bi bi-check"></i> Keine Fehler oder Warnungen.</p>
+                    {% endif %}
+                {% else %}
+                    <div class="alert alert-danger mb-0">
+                        <i class="bi bi-exclamation-triangle-fill"></i>
+                        {{ dry_run.detail or 'Unbekannter Fehler' }}
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Shipping / Tracking -->
+        <div class="card bg-dark border-secondary mb-3">
+            <div class="card-header">
+                <i class="bi bi-truck"></i> Versand &amp; Tracking
+            </div>
+            <div class="card-body">
+                {% if shipping_info and shipping_info.tracking_number %}
+                <!-- Already shipped -->
+                <div class="alert alert-success d-flex align-items-center mb-3">
+                    <i class="bi bi-check-circle-fill me-2"></i>
+                    <div>
+                        <strong>Versand gemeldet!</strong>
+                        {% if shipping_info.shipped_at %}
+                        am {{ shipping_info.shipped_at.strftime('%d.%m.%Y') }}
+                        {% endif %}
+                    </div>
+                </div>
+                <table class="table table-dark table-sm mb-0">
+                    <tr>
+                        <td class="text-muted" style="width: 180px;">Sendungsnummer</td>
+                        <td>
+                            <code>{{ shipping_info.tracking_number }}</code>
+                            <a href="https://www.dhl.de/de/privatkunden/pakete-empfangen/verfolgen.html?piececode={{ shipping_info.tracking_number }}"
+                               target="_blank" rel="noopener" class="btn btn-outline-info btn-sm ms-2">
+                                <i class="bi bi-box-arrow-up-right"></i> DHL Tracking
+                            </a>
+                        </td>
+                    </tr>
+                    {% if shipping_info.shipped_at %}
+                    <tr>
+                        <td class="text-muted">Versanddatum</td>
+                        <td>{{ shipping_info.shipped_at.strftime('%d.%m.%Y') }}</td>
+                    </tr>
+                    {% endif %}
+                    {% if shipping_info.carrier %}
+                    <tr>
+                        <td class="text-muted">Versanddienstleister</td>
+                        <td>{{ shipping_info.carrier }}</td>
+                    </tr>
+                    {% endif %}
+                </table>
+                {% else %}
+                <!-- Shipping form -->
+                <form method="post" action="/listing/{{ item.id }}/ship" id="shipping-form">
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label for="shipped_at" class="form-label">Versanddatum</label>
+                            <input type="date" class="form-control" id="shipped_at" name="shipped_at"
+                                   value="{{ today }}">
+                        </div>
+                        <div class="col-md-4">
+                            <label for="tracking_number" class="form-label">Sendungsnummer (DHL)</label>
+                            <input type="text" class="form-control" id="tracking_number" name="tracking_number"
+                                   placeholder="z.B. 00340434161094042557">
+                        </div>
+                        <div class="col-md-4">
+                            <label for="carrier" class="form-label">Versanddienstleister</label>
+                            <select class="form-select" id="carrier" name="carrier">
+                                <option value="DHL" selected>DHL</option>
+                                <option value="DPD">DPD</option>
+                                <option value="Hermes">Hermes</option>
+                                <option value="GLS">GLS</option>
+                                <option value="Deutsche Post">Deutsche Post</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        <button type="submit" class="btn btn-success" id="btn-ship">
+                            <i class="bi bi-send-check"></i> Versand an eBay melden
+                        </button>
+                        <div class="form-text mt-1">
+                            <i class="bi bi-info-circle"></i>
+                            Meldet die Sendungsnummer an eBay und informiert den Kaeufer.
+                        </div>
+                    </div>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Action buttons -->
+        <div class="d-flex gap-2 flex-wrap">
+            {% if listing.status == 'sold' or has_orders %}
+            <a href="/orders/" class="btn btn-warning btn-lg">
+                <i class="bi bi-box-seam"></i> Bestellung bearbeiten
+            </a>
+            {% endif %}
+            <a href="/listing/" class="btn btn-outline-secondary">
+                <i class="bi bi-list-ul"></i> Alle Listings
+            </a>
+            <a href="/research/{{ item.id }}" class="btn btn-outline-secondary">
+                <i class="bi bi-search"></i> Recherche
+            </a>
+            {% if item.status not in ('listed', 'sold', 'shipped') %}
+            <button type="button" class="btn btn-outline-danger ms-auto" data-bs-toggle="modal" data-bs-target="#deleteItemModal">
+                <i class="bi bi-trash"></i> Artikel loeschen
+            </button>
+            {% endif %}
+        </div>
+
+    </div>
+</div>
+
+<!-- Delete item modal -->
+{% if item.status not in ('listed', 'sold', 'shipped') %}
+<div class="modal fade" id="deleteItemModal" tabindex="-1" aria-labelledby="deleteItemModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content bg-dark border-danger">
+            <div class="modal-header border-danger">
+                <h5 class="modal-title text-danger" id="deleteItemModalLabel">
+                    <i class="bi bi-exclamation-triangle"></i> Artikel loeschen
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Schliessen"></button>
+            </div>
+            <div class="modal-body">
+                <p>Artikel <strong>{{ item.confirmed_title or item.ai_model or 'Ohne Titel' }}</strong> ({{ item.internal_number or 'IS-%d'|format(item.id) }}) wirklich loeschen?</p>
+                <div class="alert alert-warning mb-0">
+                    <i class="bi bi-info-circle"></i>
+                    Dies loescht auch alle zugehoerigen Listings, Preisrecherchen und Bestellungen.
+                    <strong>Diese Aktion kann nicht rueckgaengig gemacht werden!</strong>
+                </div>
+            </div>
+            <div class="modal-footer border-secondary">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
+                <form method="post" action="/items/delete">
+                    <input type="hidden" name="item_ids" value="{{ item.id }}">
+                    <button type="submit" class="btn btn-danger">
+                        <i class="bi bi-trash"></i> Endgueltig loeschen
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Print label style (hidden until print) -->
+<style>
+@media print {
+    body * { visibility: hidden; }
+    #print-label, #print-label * { visibility: visible; }
+    #print-label {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        text-align: center;
+        font-family: monospace;
+    }
+    #print-label .label-number {
+        font-size: 72pt;
+        font-weight: bold;
+        border: 4px solid #000;
+        padding: 20px 40px;
+    }
+    #print-label .label-title {
+        font-size: 14pt;
+        margin-top: 10px;
+    }
+}
+</style>
+<div id="print-label" style="display:none;">
+    <div class="label-number">{{ item.internal_number or 'IS-%d'|format(item.id) }}</div>
+    <div class="label-title">{{ item.confirmed_title or '' }}</div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function printLabel() {
+    var label = document.getElementById('print-label');
+    label.style.display = 'block';
+    window.print();
+    label.style.display = 'none';
+}
+
+/* Show spinner on shipping form submit */
+var shipForm = document.getElementById('shipping-form');
+if (shipForm) {
+    shipForm.addEventListener('submit', function(e) {
+        var btn = document.getElementById('btn-ship');
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Wird gemeldet...';
+        }
+    });
+}
+
+/* Schedule editing: live end-time calculation */
+var schedInput = document.getElementById('schedule_datetime');
+if (schedInput) {
+    var DURATION_DAYS = {
+        'DAYS_3': 3, 'DAYS_5': 5, 'DAYS_7': 7, 'DAYS_10': 10, 'DAYS_30': 30, 'GTC': 30
+    };
+    var durationKey = '{{ schedule_duration or "DAYS_7" }}';
+    var durationDays = DURATION_DAYS[durationKey] || 7;
+
+    function updateEndTime() {
+        var val = schedInput.value;
+        var endEl = document.getElementById('calculated-end');
+        if (!val || !endEl) return;
+        var start = new Date(val);
+        if (isNaN(start.getTime())) { endEl.textContent = '--'; return; }
+        var end = new Date(start.getTime() + durationDays * 86400000);
+        var days = ['So','Mo','Di','Mi','Do','Fr','Sa'];
+        var d = days[end.getDay()] + ' '
+            + String(end.getDate()).padStart(2,'0') + '.'
+            + String(end.getMonth()+1).padStart(2,'0') + '.'
+            + end.getFullYear() + ' '
+            + String(end.getHours()).padStart(2,'0') + ':'
+            + String(end.getMinutes()).padStart(2,'0');
+        endEl.textContent = d + ' (' + durationDays + ' Tage)';
+    }
+
+    schedInput.addEventListener('input', updateEndTime);
+    updateEndTime();
+
+    /* Show spinner on schedule form submit */
+    var schedForm = document.getElementById('update-scheduled-form');
+    if (schedForm) {
+        schedForm.addEventListener('submit', function(e) {
+            var btn = document.getElementById('btn-save-scheduled');
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Wird gespeichert...';
+            }
+        });
+    }
+}
+</script>
+{% endblock %}

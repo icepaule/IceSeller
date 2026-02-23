@@ -1,0 +1,330 @@
+{% extends "base.html" %}
+
+{% set active_page = 'capture' %}
+
+{% block title %}Erfassen - IceSeller{% endblock %}
+
+{% block content %}
+<div class="row g-3">
+
+    <!-- Left column: camera stream + PTZ -->
+    <div class="col-lg-8">
+        <div class="card bg-dark border-secondary">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-camera-video"></i> Kamera</span>
+                <button class="btn btn-success btn-sm" onclick="capturePhoto()">
+                    <i class="bi bi-camera"></i> Foto aufnehmen
+                </button>
+            </div>
+            <div class="card-body p-0">
+                <div class="camera-container" id="camera-wrapper" style="position: relative; cursor: crosshair;">
+                    <!-- Live preview -->
+                    <img id="camera-stream" alt="Kamera-Livebild">
+
+                    <!-- Crop selection overlay (drawn by JS) -->
+                    <div id="crop-overlay" style="position: absolute; border: 2px dashed #0d6efd; background: rgba(13,110,253,0.15); display: none; pointer-events: none;"></div>
+
+                    <!-- Placeholder / Error overlays -->
+                    <div id="camera-placeholder" class="camera-overlay text-muted">
+                        <div class="spinner-border mb-3" role="status"></div>
+                        <span>Kamera wird verbunden...</span>
+                    </div>
+
+                    <div id="camera-error" class="camera-overlay text-danger" hidden>
+                        <i class="bi bi-camera-video-off" style="font-size: 3rem;"></i>
+                        <span class="mt-2">Kamera nicht erreichbar</span>
+                        <button class="btn btn-outline-light btn-sm mt-2" onclick="retryStream()">
+                            <i class="bi bi-arrow-clockwise"></i> Erneut verbinden
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <!-- Controls below camera -->
+            <div class="card-footer d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <div class="btn-group btn-group-sm" id="ptz-overlay">
+                    <button class="btn btn-outline-light" onclick="ptzControl('pan_left')" title="Links">
+                        <i class="bi bi-chevron-left"></i>
+                    </button>
+                    <button class="btn btn-outline-light" onclick="ptzControl('pan_right')" title="Rechts">
+                        <i class="bi bi-chevron-right"></i>
+                    </button>
+                    <button class="btn btn-outline-light" onclick="ptzControl('tilt_up')" title="Hoch">
+                        <i class="bi bi-chevron-up"></i>
+                    </button>
+                    <button class="btn btn-outline-light" onclick="ptzControl('tilt_down')" title="Runter">
+                        <i class="bi bi-chevron-down"></i>
+                    </button>
+                    <button class="btn btn-outline-light" onclick="ptzControl('zoom_in')" title="Zoom +">
+                        <i class="bi bi-zoom-in"></i>
+                    </button>
+                    <button class="btn btn-outline-light" onclick="ptzControl('zoom_out')" title="Zoom -">
+                        <i class="bi bi-zoom-out"></i>
+                    </button>
+                    <span class="mx-1"></span>
+                    <button class="btn btn-outline-warning" onclick="ptzControl('focus_near')" title="Fokus näher">
+                        <i class="bi bi-eye"></i><small>+</small>
+                    </button>
+                    <button class="btn btn-outline-warning" onclick="ptzControl('focus_far')" title="Fokus weiter">
+                        <i class="bi bi-eye"></i><small>-</small>
+                    </button>
+                </div>
+                <div>
+                    <span id="crop-info" class="text-muted small me-2"></span>
+                    <button class="btn btn-outline-secondary btn-sm" onclick="clearCrop()" title="Ausschnitt zuruecksetzen">
+                        <i class="bi bi-fullscreen"></i> Ganzes Bild
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right column: captured images + actions -->
+    <div class="col-lg-4">
+        <!-- Internal number display (shown after first photo) -->
+        <div id="internal-number-display" class="card bg-dark border-warning mb-3" style="display:none;">
+            <div class="card-header bg-warning text-dark fw-bold text-center">
+                <i class="bi bi-upc-scan"></i> Interne Nummer
+            </div>
+            <div class="card-body text-center py-3">
+                <div class="fs-1 fw-bold font-monospace" id="internal-number-value"></div>
+            </div>
+        </div>
+
+        <div class="card bg-dark border-secondary mb-3">
+            <div class="card-header">
+                <i class="bi bi-images"></i> Aufgenommene Fotos
+            </div>
+            <div class="card-body">
+                <div id="captured-images" class="captured-images">
+                    <p id="no-photos-hint" class="text-muted small mb-0">
+                        Noch keine Fotos aufgenommen.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <div class="card bg-dark border-secondary mb-3">
+            <div class="card-header">
+                <i class="bi bi-crop"></i> Ausschnitt
+            </div>
+            <div class="card-body">
+                <p class="text-muted small mb-0">
+                    Ziehe mit der Maus ein Rechteck auf dem Livebild, um einen Ausschnitt fuer das Foto zu waehlen.
+                    Das Foto wird in voller Aufloesung aufgenommen.
+                </p>
+            </div>
+        </div>
+
+        <div class="card bg-dark border-secondary">
+            <div class="card-header">
+                <i class="bi bi-lightning"></i> Aktionen
+            </div>
+            <div class="card-body d-grid gap-2">
+                <input type="hidden" id="item-id" value="">
+                <a id="btn-identify" class="btn btn-primary disabled" href="#">
+                    <i class="bi bi-eye"></i> Identifizieren
+                </a>
+                <button class="btn btn-outline-secondary" onclick="resetCapture()">
+                    <i class="bi bi-arrow-counterclockwise"></i> Neuer Artikel
+                </button>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- Spinner overlay -->
+<div id="spinner-overlay" class="spinner-overlay">
+    <div class="text-center">
+        <div class="spinner-border text-light" style="width:3rem;height:3rem;" role="status"></div>
+        <div class="spinner-message text-light mt-3">Bitte warten...</div>
+    </div>
+</div>
+
+<!-- Toast container -->
+<div id="toast-container" class="toast-container position-fixed top-0 end-0 p-3"></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+/* --- Camera stream management --- */
+var streamImg = document.getElementById('camera-stream');
+var placeholder = document.getElementById('camera-placeholder');
+var errorDiv = document.getElementById('camera-error');
+var streamTimeout = null;
+var streamLoaded = false;
+
+function startStream() {
+    streamLoaded = false;
+    streamImg.hidden = true;
+    placeholder.hidden = false;
+    errorDiv.hidden = true;
+    streamImg.src = '/camera/stream?t=' + Date.now();
+    clearTimeout(streamTimeout);
+    streamTimeout = setTimeout(function() {
+        if (!streamLoaded) showCameraError();
+    }, 10000);
+}
+
+streamImg.onload = function() {
+    if (streamLoaded) return;
+    streamLoaded = true;
+    clearTimeout(streamTimeout);
+    placeholder.hidden = true;
+    errorDiv.hidden = true;
+    streamImg.hidden = false;
+};
+
+streamImg.onerror = function() {
+    clearTimeout(streamTimeout);
+    showCameraError();
+};
+
+function showCameraError() {
+    streamImg.hidden = true;
+    placeholder.hidden = true;
+    errorDiv.hidden = false;
+}
+
+function retryStream() { startStream(); }
+startStream();
+
+/* --- Crop selection --- */
+var cropOverlay = document.getElementById('crop-overlay');
+var cameraWrapper = document.getElementById('camera-wrapper');
+var cropInfo = document.getElementById('crop-info');
+var cropRect = null; // {x, y, w, h} as fractions 0-1
+var isDragging = false;
+var dragStart = {x: 0, y: 0};
+
+function getRelativePos(e) {
+    var rect = streamImg.getBoundingClientRect();
+    return {
+        x: Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)),
+        y: Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height))
+    };
+}
+
+cameraWrapper.addEventListener('mousedown', function(e) {
+    if (streamImg.hidden) return;
+    e.preventDefault();
+    isDragging = true;
+    dragStart = getRelativePos(e);
+    cropOverlay.style.display = 'block';
+});
+
+document.addEventListener('mousemove', function(e) {
+    if (!isDragging) return;
+    var pos = getRelativePos(e);
+    var rect = streamImg.getBoundingClientRect();
+    var wrapRect = cameraWrapper.getBoundingClientRect();
+    var offX = rect.left - wrapRect.left;
+    var offY = rect.top - wrapRect.top;
+
+    var x1 = Math.min(dragStart.x, pos.x);
+    var y1 = Math.min(dragStart.y, pos.y);
+    var x2 = Math.max(dragStart.x, pos.x);
+    var y2 = Math.max(dragStart.y, pos.y);
+
+    cropOverlay.style.left   = (offX + x1 * rect.width) + 'px';
+    cropOverlay.style.top    = (offY + y1 * rect.height) + 'px';
+    cropOverlay.style.width  = ((x2 - x1) * rect.width) + 'px';
+    cropOverlay.style.height = ((y2 - y1) * rect.height) + 'px';
+});
+
+document.addEventListener('mouseup', function(e) {
+    if (!isDragging) return;
+    isDragging = false;
+    var pos = getRelativePos(e);
+    var x1 = Math.min(dragStart.x, pos.x);
+    var y1 = Math.min(dragStart.y, pos.y);
+    var w = Math.abs(pos.x - dragStart.x);
+    var h = Math.abs(pos.y - dragStart.y);
+
+    // Ignore tiny selections (accidental clicks)
+    if (w < 0.03 || h < 0.03) {
+        clearCrop();
+        return;
+    }
+
+    cropRect = {x: x1, y: y1, w: w, h: h};
+    cropInfo.textContent = 'Ausschnitt: ' + Math.round(w*100) + '% x ' + Math.round(h*100) + '%';
+});
+
+function clearCrop() {
+    cropRect = null;
+    cropOverlay.style.display = 'none';
+    cropInfo.textContent = '';
+}
+
+/* --- Capture with crop --- */
+function capturePhoto() {
+    var itemId = document.getElementById('item-id');
+    var itemIdVal = itemId ? itemId.value : '';
+    showSpinner('Foto wird aufgenommen...');
+
+    var body = {item_id: itemIdVal || null};
+    if (cropRect) body.crop = cropRect;
+
+    apiCall('/camera/capture-photo', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(body)
+    }).then(function(data) {
+        hideSpinner();
+        if (data.item_id && itemId) itemId.value = data.item_id;
+        if (data.internal_number) {
+            var numDisplay = document.getElementById('internal-number-display');
+            var numValue = document.getElementById('internal-number-value');
+            numValue.textContent = data.internal_number;
+            numDisplay.style.display = '';
+        }
+        addCapturedThumb(data.image_path, data.item_id);
+        showToast(cropRect ? 'Ausschnitt aufgenommen!' : 'Foto aufgenommen!', 'success');
+    }).catch(function() {
+        hideSpinner();
+    });
+}
+
+/* --- PTZ --- */
+function ptzControl(direction) {
+    apiCall('/camera/ptz', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({direction: direction})
+    }).then(function() {
+        showToast('PTZ: ' + direction, 'info');
+    });
+}
+
+/* --- Capture management --- */
+function resetCapture() {
+    document.getElementById('item-id').value = '';
+    var container = document.getElementById('captured-images');
+    container.innerHTML = '<p id="no-photos-hint" class="text-muted small mb-0">Noch keine Fotos aufgenommen.</p>';
+    var btn = document.getElementById('btn-identify');
+    btn.classList.add('disabled');
+    btn.href = '#';
+    document.getElementById('internal-number-display').style.display = 'none';
+    document.getElementById('internal-number-value').textContent = '';
+    clearCrop();
+}
+
+function addCapturedThumb(imagePath, itemId) {
+    var container = document.getElementById('captured-images');
+    if (!container) return;
+    var hint = document.getElementById('no-photos-hint');
+    if (hint) hint.remove();
+    var img = document.createElement('img');
+    img.className = 'thumb';
+    img.src = '/data/images/' + imagePath;
+    img.alt = 'Aufgenommenes Foto';
+    container.appendChild(img);
+    var btn = document.getElementById('btn-identify');
+    if (btn) {
+        btn.classList.remove('disabled');
+        btn.href = '/identify/' + itemId;
+    }
+}
+</script>
+{% endblock %}

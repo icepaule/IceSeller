@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>Lieferschein - Bestellung #{{ order.id }}</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Arial, Helvetica, sans-serif;
+            font-size: 11pt;
+            color: #111;
+            padding: 20mm;
+            max-width: 210mm;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 15mm;
+        }
+        .sender-block {
+            font-size: 9pt;
+            color: #555;
+            line-height: 1.5;
+        }
+        .sender-block .name { font-weight: bold; color: #111; font-size: 11pt; }
+        .document-info {
+            text-align: right;
+        }
+        .document-info h1 {
+            font-size: 18pt;
+            font-weight: bold;
+            margin-bottom: 3mm;
+        }
+        .document-info table {
+            font-size: 9pt;
+            margin-left: auto;
+        }
+        .document-info table td {
+            padding: 1px 0 1px 10px;
+        }
+        .document-info table td:first-child {
+            color: #777;
+            text-align: right;
+        }
+        .recipient {
+            margin-bottom: 12mm;
+            padding: 4mm 6mm;
+            border: 1px solid #ccc;
+            background: #f9f9f9;
+        }
+        .recipient .label {
+            font-size: 8pt;
+            color: #999;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 2mm;
+        }
+        .recipient .address {
+            font-size: 12pt;
+            line-height: 1.6;
+        }
+        .recipient .address .name { font-weight: bold; }
+        .items-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 10mm;
+        }
+        .items-table th {
+            background: #333;
+            color: #fff;
+            padding: 3mm 4mm;
+            text-align: left;
+            font-size: 9pt;
+            font-weight: 600;
+        }
+        .items-table th:last-child { text-align: center; }
+        .items-table td {
+            padding: 3mm 4mm;
+            border-bottom: 1px solid #ddd;
+            vertical-align: top;
+        }
+        .items-table td:last-child { text-align: center; }
+        .items-table .item-title { font-weight: 600; }
+        .items-table .item-desc {
+            font-size: 9pt;
+            color: #666;
+            margin-top: 1mm;
+        }
+        .items-table .internal-nr {
+            font-family: monospace;
+            font-size: 10pt;
+            font-weight: bold;
+            background: #ffe;
+            padding: 1mm 2mm;
+            border: 1px solid #cc0;
+        }
+        .notes {
+            margin-top: 10mm;
+            padding-top: 5mm;
+            border-top: 1px solid #ccc;
+            font-size: 9pt;
+            color: #777;
+        }
+        .footer {
+            position: fixed;
+            bottom: 15mm;
+            left: 20mm;
+            right: 20mm;
+            font-size: 8pt;
+            color: #aaa;
+            text-align: center;
+            border-top: 1px solid #ddd;
+            padding-top: 3mm;
+        }
+        @media print {
+            body { padding: 15mm; }
+            .no-print { display: none !important; }
+        }
+        @media screen {
+            body { background: #f0f0f0; }
+            .page {
+                background: white;
+                padding: 20mm;
+                max-width: 210mm;
+                margin: 10mm auto;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.15);
+            }
+        }
+        .print-btn {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            padding: 10px 25px;
+            background: #333;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 14px;
+            cursor: pointer;
+            z-index: 1000;
+        }
+        .print-btn:hover { background: #555; }
+    </style>
+</head>
+<body>
+<button class="print-btn no-print" onclick="window.print()">Drucken</button>
+<div class="page">
+
+    <div class="header">
+        <div class="sender-block">
+            <div class="name">{{ sender.name }}</div>
+            {{ sender.street }}<br>
+            {{ sender.postal_code }} {{ sender.city }}
+        </div>
+        <div class="document-info">
+            <h1>Lieferschein</h1>
+            <table>
+                <tr>
+                    <td>Datum:</td>
+                    <td><strong>{{ today }}</strong></td>
+                </tr>
+                <tr>
+                    <td>Bestellung:</td>
+                    <td><strong>#{{ order.id }}</strong></td>
+                </tr>
+                {% if order.ebay_order_id %}
+                <tr>
+                    <td>eBay-Nr.:</td>
+                    <td>{{ order.ebay_order_id[:25] }}{{ '...' if order.ebay_order_id|length > 25 else '' }}</td>
+                </tr>
+                {% endif %}
+                {% if order.sold_at %}
+                <tr>
+                    <td>Kaufdatum:</td>
+                    <td>{{ order.sold_at.strftime('%d.%m.%Y') }}</td>
+                </tr>
+                {% endif %}
+            </table>
+        </div>
+    </div>
+
+    <div class="recipient">
+        <div class="label">Empfaenger / Lieferadresse</div>
+        {% if order.buyer_address %}
+        <div class="address">
+            <div class="name">{{ order.buyer_address.get('name', '') }}</div>
+            {{ order.buyer_address.get('street', '') }}<br>
+            {% if order.buyer_address.get('street2') %}
+            {{ order.buyer_address.get('street2') }}<br>
+            {% endif %}
+            {{ order.buyer_address.get('postal_code', '') }} {{ order.buyer_address.get('city', '') }}<br>
+            {% if order.buyer_address.get('country', 'DE') != 'DE' %}
+            {{ order.buyer_address.get('country', '') }}
+            {% endif %}
+        </div>
+        {% else %}
+        <div class="address" style="color: #c00;">Keine Adresse vorhanden</div>
+        {% endif %}
+    </div>
+
+    <table class="items-table">
+        <thead>
+            <tr>
+                <th style="width: 80px;">Int. Nr.</th>
+                <th>Artikel</th>
+                <th style="width: 60px;">Menge</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% if item %}
+            <tr>
+                <td>
+                    <span class="internal-nr">{{ item.internal_number or 'IS-%d'|format(item.id) }}</span>
+                </td>
+                <td>
+                    <div class="item-title">{{ item.confirmed_title or 'Ohne Titel' }}</div>
+                    {% if item.confirmed_description %}
+                    <div class="item-desc">{{ item.confirmed_description[:150] }}{{ '...' if item.confirmed_description|length > 150 else '' }}</div>
+                    {% endif %}
+                </td>
+                <td>{{ item.quantity or 1 }}</td>
+            </tr>
+            {% endif %}
+        </tbody>
+    </table>
+
+    <div class="notes">
+        Vielen Dank fuer Ihren Einkauf! Bei Fragen wenden Sie sich bitte an den Verkaeufer.
+        {% if order.dhl_tracking %}
+        <br>Sendungsnummer: <strong>{{ order.dhl_tracking }}</strong>
+        {% endif %}
+    </div>
+
+    <div class="footer">
+        {{ sender.name }} &middot; {{ sender.street }} &middot; {{ sender.postal_code }} {{ sender.city }}
+    </div>
+
+</div>
+</body>
+</html>

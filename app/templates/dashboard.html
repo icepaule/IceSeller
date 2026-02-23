@@ -1,0 +1,395 @@
+{% extends "base.html" %}
+
+{% set active_page = 'dashboard' %}
+
+{% block title %}Dashboard - IceSeller{% endblock %}
+
+{% block content %}
+<div class="row g-3">
+
+    <!-- Flash messages -->
+    {% if msg %}
+    <div class="col-12">
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            <i class="bi bi-check-circle"></i> {{ msg }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    </div>
+    {% endif %}
+    {% if error %}
+    <div class="col-12">
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <i class="bi bi-exclamation-triangle"></i> {{ error }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Stats row -->
+    <div class="col-6 col-md-3">
+        <div class="card bg-dark border-secondary text-center h-100">
+            <div class="card-body py-3">
+                <div class="text-muted small mb-1"><i class="bi bi-box-seam"></i> Artikel gesamt</div>
+                <div class="fs-3 fw-bold">{{ total_items }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="card bg-dark border-secondary text-center h-100">
+            <div class="card-body py-3">
+                <div class="text-muted small mb-1"><i class="bi bi-tags"></i> Aktive Listings</div>
+                <div class="fs-3 fw-bold text-success">{{ active_listings }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="card bg-dark border-secondary text-center h-100">
+            <div class="card-body py-3">
+                <div class="text-muted small mb-1"><i class="bi bi-bag-check"></i> Verkauft</div>
+                <div class="fs-3 fw-bold text-warning">{{ sold_count + shipped_count + completed_count }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="card bg-dark border-success text-center h-100">
+            <div class="card-body py-3">
+                <div class="text-muted small mb-1"><i class="bi bi-currency-euro"></i> Umsatz</div>
+                <div class="fs-3 fw-bold text-success">{{ '%.2f'|format(revenue) }}</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick actions -->
+    <div class="col-12">
+        <div class="d-flex gap-2 flex-wrap">
+            <a href="/camera/capture" class="btn btn-primary">
+                <i class="bi bi-camera"></i> Neues Produkt erfassen
+            </a>
+            <form action="/orders/sync" method="post" class="d-inline">
+                <button type="submit" class="btn btn-outline-warning">
+                    <i class="bi bi-arrow-repeat"></i> Bestellungen synchronisieren
+                </button>
+            </form>
+            <a href="/listing/" class="btn btn-outline-secondary">
+                <i class="bi bi-tags"></i> Alle Listings
+            </a>
+            <a href="/orders/" class="btn btn-outline-secondary">
+                <i class="bi bi-box-seam"></i> Bestellungen
+            </a>
+            <button type="button" class="btn btn-outline-danger" id="btn-delete-selected" disabled>
+                <i class="bi bi-trash"></i> <span id="delete-btn-text">Ausgewaehlte loeschen</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Status summary -->
+    <div class="col-12">
+        <div class="card bg-dark border-secondary">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-bar-chart"></i> Status-Uebersicht</span>
+                <span class="badge bg-secondary fs-6">{{ total_items }} Artikel</span>
+            </div>
+            <div class="card-body">
+                <div class="d-flex flex-wrap gap-3">
+                    {% for status_name, label in [('draft', 'Entwurf'), ('identified', 'Identifiziert'), ('researched', 'Recherchiert'), ('scheduled', 'Geplant'), ('listed', 'Eingestellt'), ('sold', 'Verkauft'), ('shipped', 'Versendet'), ('completed', 'Abgeschlossen')] %}
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="badge status-{{ status_name }}">{{ label }}</span>
+                        <span class="fw-bold">{{ status_counts.get(status_name, 0) }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent items table -->
+    <div class="col-12">
+        <div class="card bg-dark border-secondary">
+            <div class="card-header">
+                <i class="bi bi-clock-history"></i> Letzte Artikel
+            </div>
+            <div class="card-body p-0">
+                {% if recent_items %}
+                <form id="delete-form" method="post" action="/items/delete">
+                <div class="table-responsive">
+                    <table class="table table-dark table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th style="width: 40px;" class="text-center">
+                                    <input type="checkbox" class="form-check-input" id="select-all" title="Alle auswaehlen">
+                                </th>
+                                <th style="width: 60px;">Bild</th>
+                                <th style="width: 120px;">Nr.</th>
+                                <th>Titel</th>
+                                <th style="width: 120px;">Status</th>
+                                <th style="width: 50px;">Stk</th>
+                                <th style="width: 100px;">Preis</th>
+                                <th style="width: 130px;">Erstellt</th>
+                                <th style="width: 120px;">Aktionen</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for entry in recent_items %}
+                            {% set item = entry.item %}
+                            {% set listing = entry.listing %}
+                            <tr>
+                                <td class="text-center">
+                                    <input type="checkbox" class="form-check-input item-checkbox"
+                                           name="item_ids" value="{{ item.id }}"
+                                           data-title="{{ item.confirmed_title or item.ai_model or 'Ohne Titel' }}"
+                                           data-status="{{ item.status }}"
+                                           {% if item.status in ('listed', 'sold', 'shipped') %}disabled title="Aktive/verkaufte Artikel koennen nicht geloescht werden"{% endif %}>
+                                </td>
+                                <td>
+                                    {% if item.images %}
+                                    <img src="/data/images/{{ item.images[0] }}"
+                                         alt="Bild"
+                                         style="width: 40px; height: 40px; object-fit: cover; border-radius: 4px;">
+                                    {% else %}
+                                    <div class="d-flex align-items-center justify-content-center bg-secondary rounded" style="width: 40px; height: 40px;">
+                                        <i class="bi bi-image text-muted"></i>
+                                    </div>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <input type="text" class="form-control form-control-sm bg-dark text-light border-secondary internal-nr-input"
+                                           value="{{ item.internal_number or '' }}"
+                                           data-item-id="{{ item.id }}"
+                                           placeholder="—"
+                                           style="width: 110px; font-family: monospace; font-size: 0.85em;"
+                                           title="Interne Nummer (Enter zum Speichern)">
+                                </td>
+                                <td class="text-truncate" style="max-width: 300px;">
+                                    {{ item.confirmed_title or item.ai_model or 'Ohne Titel' }}
+                                </td>
+                                <td>
+                                    <span class="badge status-{{ item.status }}">{{ item.status }}</span>
+                                </td>
+                                <td class="text-center">
+                                    {% if item.quantity and item.quantity > 1 %}
+                                    <span class="badge bg-info">{{ item.quantity }}</span>
+                                    {% else %}
+                                    <span class="text-muted">1</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if listing and listing.current_price %}
+                                    EUR {{ '%.2f'|format(listing.current_price) }}
+                                    {% elif listing and listing.buy_now_price %}
+                                    <span class="text-muted">EUR {{ '%.2f'|format(listing.buy_now_price) }}</span>
+                                    {% elif listing and listing.start_price %}
+                                    <span class="text-muted">EUR {{ '%.2f'|format(listing.start_price) }}</span>
+                                    {% else %}
+                                    <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {{ item.created_at.strftime('%d.%m.%Y %H:%M') if item.created_at else '-' }}
+                                </td>
+                                <td>
+                                    {% if item.status == 'draft' %}
+                                    <a href="/identify/{{ item.id }}" class="btn btn-outline-primary btn-sm" title="Identifizieren">
+                                        <i class="bi bi-search"></i>
+                                    </a>
+                                    {% elif item.status == 'identified' %}
+                                    <a href="/research/{{ item.id }}" class="btn btn-outline-info btn-sm" title="Recherchieren">
+                                        <i class="bi bi-graph-up"></i>
+                                    </a>
+                                    {% elif item.status == 'researched' %}
+                                    <a href="/listing/{{ item.id }}/create" class="btn btn-outline-warning btn-sm" title="Listing erstellen">
+                                        <i class="bi bi-tags"></i>
+                                    </a>
+                                    {% elif item.status == 'scheduled' %}
+                                    <a href="/listing/{{ item.id }}/detail" class="btn btn-outline-info btn-sm" title="Geplantes Listing">
+                                        <i class="bi bi-calendar-check"></i>
+                                    </a>
+                                    {% elif item.status in ('listed', 'sold', 'shipped') %}
+                                    <a href="/listing/{{ item.id }}/detail" class="btn btn-outline-success btn-sm" title="Listing ansehen">
+                                        <i class="bi bi-eye"></i>
+                                    </a>
+                                    {% endif %}
+                                    {% if item.status in ('sold',) %}
+                                    <a href="/orders/" class="btn btn-outline-warning btn-sm" title="Bestellungen">
+                                        <i class="bi bi-box-seam"></i>
+                                    </a>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                </form>
+                {% else %}
+                <div class="text-center py-5">
+                    <i class="bi bi-inbox text-muted" style="font-size: 3rem;"></i>
+                    <h5 class="mt-3 text-muted">Noch keine Artikel vorhanden</h5>
+                    <p class="text-muted">Erfasse deinen ersten Artikel, um loszulegen.</p>
+                    <a href="/camera/capture" class="btn btn-primary">
+                        <i class="bi bi-camera"></i> Neues Produkt erfassen
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- Delete confirmation modal -->
+<div class="modal fade" id="deleteModal" tabindex="-1" aria-labelledby="deleteModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content bg-dark border-danger">
+            <div class="modal-header border-danger">
+                <h5 class="modal-title text-danger" id="deleteModalLabel">
+                    <i class="bi bi-exclamation-triangle"></i> Artikel loeschen
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Schliessen"></button>
+            </div>
+            <div class="modal-body">
+                <p id="delete-modal-text"></p>
+                <div class="alert alert-warning mb-0">
+                    <i class="bi bi-info-circle"></i>
+                    Dies loescht auch alle zugehoerigen Listings, Preisrecherchen und Bestellungen.
+                    <strong>Diese Aktion kann nicht rueckgaengig gemacht werden!</strong>
+                </div>
+            </div>
+            <div class="modal-footer border-secondary">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Abbrechen</button>
+                <button type="button" class="btn btn-danger" id="btn-confirm-delete">
+                    <i class="bi bi-trash"></i> Endgueltig loeschen
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function() {
+    var selectAll = document.getElementById('select-all');
+    var checkboxes = document.querySelectorAll('.item-checkbox:not([disabled])');
+    var deleteBtn = document.getElementById('btn-delete-selected');
+    var deleteBtnText = document.getElementById('delete-btn-text');
+    var deleteForm = document.getElementById('delete-form');
+    var modalText = document.getElementById('delete-modal-text');
+    var confirmBtn = document.getElementById('btn-confirm-delete');
+
+    function updateDeleteButton() {
+        var checked = document.querySelectorAll('.item-checkbox:checked');
+        var count = checked.length;
+        if (deleteBtn) deleteBtn.disabled = count === 0;
+        if (deleteBtnText) {
+            deleteBtnText.textContent = count === 0
+                ? 'Ausgewaehlte loeschen'
+                : count + ' Artikel loeschen';
+        }
+    }
+
+    function highlightRow(cb) {
+        var tr = cb.closest('tr');
+        if (tr) tr.classList.toggle('table-active', cb.checked);
+    }
+
+    if (selectAll) {
+        selectAll.addEventListener('change', function() {
+            checkboxes.forEach(function(cb) {
+                cb.checked = selectAll.checked;
+                highlightRow(cb);
+            });
+            updateDeleteButton();
+        });
+    }
+
+    checkboxes.forEach(function(cb) {
+        cb.addEventListener('change', function() {
+            highlightRow(this);
+            if (selectAll) {
+                selectAll.checked = document.querySelectorAll('.item-checkbox:not([disabled]):checked').length === checkboxes.length && checkboxes.length > 0;
+            }
+            updateDeleteButton();
+        });
+    });
+
+    // Delete button click: use Bootstrap modal if available, otherwise native confirm
+    if (deleteBtn) {
+        deleteBtn.addEventListener('click', function() {
+            var checked = document.querySelectorAll('.item-checkbox:checked');
+            if (checked.length === 0) return;
+
+            var titles = [];
+            checked.forEach(function(cb) { titles.push(cb.dataset.title); });
+
+            var modalEl = document.getElementById('deleteModal');
+            if (modalEl && typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+                // Bootstrap available: show nice modal
+                if (modalText) {
+                    if (checked.length === 1) {
+                        modalText.innerHTML = 'Artikel <strong>' + titles[0] + '</strong> wirklich loeschen?';
+                    } else {
+                        modalText.innerHTML = '<strong>' + checked.length + ' Artikel</strong> wirklich loeschen?<ul class="mt-2 mb-0">' +
+                            titles.map(function(t) { return '<li>' + t + '</li>'; }).join('') + '</ul>';
+                    }
+                }
+                var modal = new bootstrap.Modal(modalEl);
+                modal.show();
+            } else {
+                // Fallback: native confirm dialog
+                var msg = checked.length === 1
+                    ? 'Artikel "' + titles[0] + '" wirklich loeschen?'
+                    : checked.length + ' Artikel wirklich loeschen?';
+                if (confirm(msg) && deleteForm) {
+                    deleteForm.submit();
+                }
+            }
+        });
+    }
+
+    if (confirmBtn && deleteForm) {
+        confirmBtn.addEventListener('click', function() {
+            deleteForm.submit();
+        });
+    }
+
+    // Inline editing for internal number
+    document.querySelectorAll('.internal-nr-input').forEach(function(input) {
+        var originalValue = input.value;
+
+        input.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                this.blur();
+            }
+            if (e.key === 'Escape') {
+                this.value = originalValue;
+                this.blur();
+            }
+        });
+
+        input.addEventListener('blur', function() {
+            var newValue = this.value.trim();
+            if (newValue === originalValue) return;
+            var itemId = this.dataset.itemId;
+            var el = this;
+            el.classList.remove('border-success', 'border-danger');
+            fetch('/items/' + itemId + '/internal-number', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({internal_number: newValue})
+            }).then(function(resp) {
+                if (resp.ok) {
+                    originalValue = newValue;
+                    el.classList.add('border-success');
+                    setTimeout(function() { el.classList.remove('border-success'); }, 1500);
+                } else {
+                    el.classList.add('border-danger');
+                }
+            }).catch(function() {
+                el.classList.add('border-danger');
+            });
+        });
+    });
+})();
+</script>
+{% endblock %}

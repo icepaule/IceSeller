@@ -1,0 +1,237 @@
+{% extends "base.html" %}
+
+{% set active_page = 'orders' %}
+
+{% block title %}Bestellung #{{ order.id }} - IceSeller{% endblock %}
+
+{% block content %}
+<div class="row g-3">
+
+    <!-- Breadcrumb -->
+    <div class="col-12">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb mb-0">
+                <li class="breadcrumb-item"><a href="/orders/" class="text-decoration-none">Bestellungen</a></li>
+                <li class="breadcrumb-item active">Bestellung #{{ order.id }}</li>
+            </ol>
+        </nav>
+    </div>
+
+    <!-- Left column: item info -->
+    <div class="col-lg-4">
+
+        <!-- Item card -->
+        {% if item %}
+        <div class="card bg-dark border-secondary mb-3">
+            <div class="card-header">
+                <i class="bi bi-box-seam"></i> Artikel
+            </div>
+            <div class="card-body">
+                {% if item.images %}
+                <div class="text-center mb-3">
+                    <img src="/data/images/{{ item.images[0] }}"
+                         alt="Artikelbild"
+                         class="img-fluid rounded"
+                         style="max-height: 200px; object-fit: contain; background: #111;">
+                </div>
+                {% endif %}
+                <h5 class="card-title">{{ item.confirmed_title or 'Ohne Titel' }}</h5>
+                {% if item.weight_g %}
+                <p class="text-muted small mb-0">
+                    <i class="bi bi-box"></i> Gewicht: {{ item.weight_g }}g
+                </p>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Price info -->
+        <div class="card bg-dark border-secondary">
+            <div class="card-header">
+                <i class="bi bi-currency-euro"></i> Preisinfo
+            </div>
+            <div class="card-body">
+                <table class="table table-dark table-sm mb-0">
+                    <tr>
+                        <td class="text-muted">Gesamtbetrag</td>
+                        <td class="fw-bold text-end">
+                            {% if order.total_price %}
+                            EUR {{ '%.2f'|format(order.total_price) }}
+                            {% else %}
+                            -
+                            {% endif %}
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">Versandkosten</td>
+                        <td class="text-end">
+                            {% if order.shipping_cost %}
+                            EUR {{ '%.2f'|format(order.shipping_cost) }}
+                            {% else %}
+                            -
+                            {% endif %}
+                        </td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right column: order details -->
+    <div class="col-lg-8">
+
+        <!-- Order info -->
+        <div class="card bg-dark border-secondary mb-3">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-receipt"></i> Bestelldetails</span>
+                <div class="d-flex gap-2">
+                    {% if order.payment_status == 'PAID' %}
+                    <span class="badge bg-success">Bezahlt</span>
+                    {% elif order.payment_status == 'PENDING' %}
+                    <span class="badge bg-warning text-dark">Zahlung ausstehend</span>
+                    {% elif order.payment_status %}
+                    <span class="badge bg-secondary">{{ order.payment_status }}</span>
+                    {% endif %}
+
+                    {% if order.fulfillment_status == 'shipped' %}
+                    <span class="badge status-shipped">Versendet</span>
+                    {% elif order.fulfillment_status == 'delivered' %}
+                    <span class="badge status-completed">Zugestellt</span>
+                    {% else %}
+                    <span class="badge status-listed">Versand offen</span>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="card-body">
+                <table class="table table-dark table-sm mb-0">
+                    <tr>
+                        <td class="text-muted" style="width: 180px;">eBay Bestell-ID</td>
+                        <td><code>{{ order.ebay_order_id or '-' }}</code></td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">Kaeufer</td>
+                        <td>
+                            <strong>{{ order.buyer_name or '-' }}</strong>
+                            {% if order.buyer_username %}
+                            <span class="text-muted ms-2">({{ order.buyer_username }})</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">Kaufdatum</td>
+                        <td>{{ order.sold_at.strftime('%d.%m.%Y %H:%M') if order.sold_at else '-' }}</td>
+                    </tr>
+                    {% if order.shipped_at %}
+                    <tr>
+                        <td class="text-muted">Versanddatum</td>
+                        <td>{{ order.shipped_at.strftime('%d.%m.%Y %H:%M') }}</td>
+                    </tr>
+                    {% endif %}
+                </table>
+            </div>
+        </div>
+
+        <!-- Buyer address -->
+        <div class="card bg-dark border-secondary mb-3">
+            <div class="card-header">
+                <i class="bi bi-geo-alt"></i> Lieferadresse
+            </div>
+            <div class="card-body">
+                {% if order.buyer_address %}
+                <address class="mb-0">
+                    <strong>{{ order.buyer_address.get('name', '') }}</strong><br>
+                    {{ order.buyer_address.get('street', '') }}<br>
+                    {% if order.buyer_address.get('street2') %}
+                    {{ order.buyer_address.get('street2') }}<br>
+                    {% endif %}
+                    {{ order.buyer_address.get('postal_code', '') }} {{ order.buyer_address.get('city', '') }}<br>
+                    {% if order.buyer_address.get('state') %}
+                    {{ order.buyer_address.get('state') }}<br>
+                    {% endif %}
+                    {{ order.buyer_address.get('country', '') }}
+                </address>
+                {% else %}
+                <p class="text-muted mb-0">Keine Adresse vorhanden</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Shipping / Tracking info -->
+        {% if order.fulfillment_status == 'shipped' or order.dhl_tracking %}
+        <div class="card bg-dark border-success mb-3">
+            <div class="card-header text-success">
+                <i class="bi bi-truck"></i> Versandinformationen
+            </div>
+            <div class="card-body">
+                <table class="table table-dark table-sm mb-3">
+                    <tr>
+                        <td class="text-muted" style="width: 180px;">DHL Sendungsnummer</td>
+                        <td><code class="text-success">{{ order.dhl_tracking }}</code></td>
+                    </tr>
+                    {% if order.shipped_at %}
+                    <tr>
+                        <td class="text-muted">Versendet am</td>
+                        <td>{{ order.shipped_at.strftime('%d.%m.%Y %H:%M') }}</td>
+                    </tr>
+                    {% endif %}
+                </table>
+                <div class="d-flex gap-2">
+                    {% if order.dhl_label_url %}
+                    <a href="{{ order.dhl_label_url }}" target="_blank" rel="noopener" class="btn btn-outline-light btn-sm">
+                        <i class="bi bi-download"></i> Label herunterladen
+                    </a>
+                    {% endif %}
+                    {% if order.dhl_tracking %}
+                    <a href="https://www.dhl.de/de/privatkunden/pakete-empfangen/verfolgen.html?piececode={{ order.dhl_tracking }}"
+                       target="_blank" rel="noopener" class="btn btn-outline-warning btn-sm">
+                        <i class="bi bi-geo-alt"></i> Sendungsverfolgung
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Shipping documents -->
+        <div class="card bg-dark border-secondary mb-3">
+            <div class="card-header">
+                <i class="bi bi-file-earmark-text"></i> Versandpapiere
+            </div>
+            <div class="card-body">
+                <div class="d-flex gap-2 flex-wrap">
+                    <a href="/shipping/{{ order.id }}/packing-slip" target="_blank" class="btn btn-outline-light">
+                        <i class="bi bi-card-list"></i> Lieferschein
+                    </a>
+                    <a href="/shipping/{{ order.id }}/address-label" target="_blank" class="btn btn-outline-light">
+                        <i class="bi bi-envelope"></i> Adresslabel
+                    </a>
+                    <a href="/shipping/{{ order.id }}/invoice" target="_blank" class="btn btn-outline-light">
+                        <i class="bi bi-receipt"></i> Rechnung
+                    </a>
+                </div>
+                <div class="form-text mt-2">
+                    <i class="bi bi-info-circle"></i> Oeffnet als druckbare Seite in neuem Tab.
+                </div>
+            </div>
+        </div>
+
+        <!-- Action buttons -->
+        <div class="d-flex gap-2 flex-wrap">
+            {% if order.fulfillment_status == 'pending' %}
+            <a href="/shipping/{{ order.id }}" class="btn btn-warning btn-lg">
+                <i class="bi bi-truck"></i> Versandlabel erstellen
+            </a>
+            {% endif %}
+            <a href="/orders/" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left"></i> Alle Bestellungen
+            </a>
+            {% if listing %}
+            <a href="/listing/{{ listing.item_id }}/detail" class="btn btn-outline-secondary">
+                <i class="bi bi-tags"></i> Listing ansehen
+            </a>
+            {% endif %}
+        </div>
+
+    </div>
+</div>
+{% endblock %}

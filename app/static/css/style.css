@@ -1,0 +1,161 @@
+/* IceSeller - Custom Styles */
+
+body {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+main {
+    flex: 1;
+}
+
+/* Camera stream */
+.camera-container {
+    position: relative;
+    background: #000;
+    border-radius: 8px;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 300px;
+}
+
+.camera-container #camera-stream {
+    max-width: 100%;
+    height: auto;
+    display: block;
+}
+
+.camera-container .camera-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+.ptz-controls {
+    position: absolute;
+    bottom: 10px;
+    right: 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+}
+
+.ptz-controls .btn {
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0.8;
+}
+
+.ptz-row {
+    display: flex;
+    gap: 2px;
+}
+
+/* Status badges */
+.status-draft { background-color: #6c757d; }
+.status-identified { background-color: #0d6efd; }
+.status-researched { background-color: #6610f2; }
+.status-scheduled { background-color: #0dcaf0; }
+.status-listed { background-color: #fd7e14; }
+.status-sold { background-color: #198754; }
+.status-shipped { background-color: #0dcaf0; }
+.status-completed { background-color: #20c997; }
+.status-active { background-color: #198754; }
+.status-ended { background-color: #6c757d; }
+.status-unsold { background-color: #dc3545; }
+
+/* Item cards */
+.item-card {
+    transition: transform 0.15s;
+    cursor: pointer;
+}
+
+.item-card:hover {
+    transform: translateY(-2px);
+}
+
+.item-card .card-img-top {
+    height: 200px;
+    object-fit: cover;
+    background: #1a1a1a;
+}
+
+/* Price research */
+.price-suggestion {
+    font-size: 1.5rem;
+    font-weight: bold;
+}
+
+/* Image gallery */
+.image-gallery {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.image-gallery img {
+    width: 120px;
+    height: 120px;
+    object-fit: cover;
+    border-radius: 4px;
+    cursor: pointer;
+    border: 2px solid transparent;
+}
+
+.image-gallery img.selected {
+    border-color: #0d6efd;
+}
+
+/* Loading spinner */
+.spinner-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    display: none;
+}
+
+.spinner-overlay.active {
+    display: flex;
+}
+
+/* Capture thumbnails */
+.captured-images {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding: 8px 0;
+}
+
+.captured-images .thumb {
+    width: 80px;
+    height: 80px;
+    object-fit: cover;
+    border-radius: 4px;
+    flex-shrink: 0;
+    border: 2px solid #333;
+}
+
+.captured-images .thumb:hover {
+    border-color: #0d6efd;
+}

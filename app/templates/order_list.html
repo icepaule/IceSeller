@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+
+{% set active_page = 'orders' %}
+
+{% block title %}Bestellungen - IceSeller{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h4 class="mb-0"><i class="bi bi-box-seam"></i> Bestellungen</h4>
+            <div class="d-flex gap-2 align-items-center">
+                <span class="badge bg-secondary fs-6">{{ order_data|length }}</span>
+                <form action="/orders/sync" method="post" class="d-inline">
+                    <button type="submit" class="btn btn-warning btn-sm">
+                        <i class="bi bi-arrow-repeat"></i> Bestellungen synchronisieren
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        {% if order_data %}
+        <div class="table-responsive">
+            <table class="table table-dark table-hover">
+                <thead>
+                    <tr>
+                        <th style="width: 160px;">eBay Bestell-ID</th>
+                        <th style="width: 150px;">Kaeufer</th>
+                        <th>Artikel</th>
+                        <th style="width: 100px;">Betrag</th>
+                        <th style="width: 100px;">Zahlung</th>
+                        <th style="width: 110px;">Versand</th>
+                        <th style="width: 130px;">Datum</th>
+                        <th style="width: 100px;">Aktionen</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for entry in order_data %}
+                    {% set o = entry.order %}
+                    {% set listing = entry.listing %}
+                    {% set item = entry.item %}
+                    <tr>
+                        <td>
+                            <code class="small">{{ o.ebay_order_id[:20] if o.ebay_order_id else '-' }}{{ '...' if o.ebay_order_id and o.ebay_order_id|length > 20 else '' }}</code>
+                        </td>
+                        <td class="text-truncate" style="max-width: 150px;">
+                            {{ o.buyer_name or o.buyer_username or 'Unbekannt' }}
+                        </td>
+                        <td class="text-truncate" style="max-width: 250px;">
+                            {% if item %}
+                            <div class="d-flex align-items-center gap-2">
+                                {% if item.images %}
+                                <img src="/data/images/{{ item.images[0] }}"
+                                     alt="Bild"
+                                     style="width: 30px; height: 30px; object-fit: cover; border-radius: 4px;">
+                                {% endif %}
+                                <span>{{ item.confirmed_title or 'Ohne Titel' }}</span>
+                            </div>
+                            {% else %}
+                            <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if o.total_price %}
+                            EUR {{ '%.2f'|format(o.total_price) }}
+                            {% else %}
+                            -
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if o.payment_status == 'PAID' %}
+                            <span class="badge bg-success">Bezahlt</span>
+                            {% elif o.payment_status == 'PENDING' %}
+                            <span class="badge bg-warning text-dark">Ausstehend</span>
+                            {% elif o.payment_status %}
+                            <span class="badge bg-secondary">{{ o.payment_status }}</span>
+                            {% else %}
+                            <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if o.fulfillment_status == 'shipped' %}
+                            <span class="badge status-shipped">Versendet</span>
+                            {% elif o.fulfillment_status == 'delivered' %}
+                            <span class="badge status-completed">Zugestellt</span>
+                            {% else %}
+                            <span class="badge status-listed">Offen</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {{ o.sold_at.strftime('%d.%m.%Y') if o.sold_at else '-' }}
+                        </td>
+                        <td>
+                            <div class="d-flex gap-1">
+                                <a href="/orders/{{ o.id }}" class="btn btn-outline-secondary btn-sm" title="Details">
+                                    <i class="bi bi-eye"></i>
+                                </a>
+                                {% if o.fulfillment_status == 'pending' %}
+                                <a href="/shipping/{{ o.id }}" class="btn btn-outline-warning btn-sm" title="Versand">
+                                    <i class="bi bi-truck"></i>
+                                </a>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="card bg-dark border-secondary">
+            <div class="card-body text-center py-5">
+                <i class="bi bi-box-seam text-muted" style="font-size: 3rem;"></i>
+                <h5 class="mt-3 text-muted">Noch keine Bestellungen vorhanden</h5>
+                <p class="text-muted">Synchronisiere deine eBay-Bestellungen, um sie hier zu verwalten.</p>
+                <form action="/orders/sync" method="post" class="d-inline">
+                    <button type="submit" class="btn btn-warning">
+                        <i class="bi bi-arrow-repeat"></i> Bestellungen synchronisieren
+                    </button>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+
+    </div>
+</div>
+{% endblock %}

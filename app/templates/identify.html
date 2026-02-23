@@ -1,0 +1,459 @@
+{% extends "base.html" %}
+
+{% set active_page = 'identify' %}
+
+{% block title %}Identifizieren - Artikel #{{ item.id }} - IceSeller{% endblock %}
+
+{% block content %}
+<div class="row g-3">
+
+    <!-- Left column: images -->
+    <div class="col-lg-5">
+        <div class="card bg-dark border-secondary">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-images"></i> Artikelbilder</span>
+                <span class="badge bg-secondary">{{ item.images|length }} Foto{{ 's' if item.images|length != 1 else '' }}</span>
+            </div>
+            <div class="card-body">
+                {% if item.images %}
+                <!-- Main preview image -->
+                <div class="text-center mb-3">
+                    <img id="preview-image"
+                         src="/data/images/{{ item.images[0] }}"
+                         alt="Artikelbild"
+                         class="img-fluid rounded"
+                         style="max-height: 400px; object-fit: contain; background: #111;">
+                </div>
+                <!-- Thumbnail gallery -->
+                <div class="image-gallery">
+                    {% for img in item.images %}
+                    <img src="/data/images/{{ img }}"
+                         alt="Bild {{ loop.index }}"
+                         class="{{ 'selected' if loop.first else '' }}"
+                         onclick="selectPreview(this, '{{ img }}')">
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-muted mb-0">
+                    <i class="bi bi-exclamation-triangle"></i> Keine Bilder vorhanden.
+                    <a href="/camera/capture">Fotos aufnehmen</a>
+                </p>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Item info -->
+        <div class="card bg-dark border-secondary mt-3">
+            <div class="card-header">
+                <i class="bi bi-info-circle"></i> Artikel-Info
+            </div>
+            <div class="card-body">
+                <table class="table table-dark table-sm mb-0">
+                    <tr><td class="text-muted">ID</td><td>#{{ item.id }}</td></tr>
+                    <tr><td class="text-muted">Status</td><td><span class="badge status-{{ item.status }}">{{ item.status }}</span></td></tr>
+                    <tr><td class="text-muted">Erstellt</td><td>{{ item.created_at.strftime('%d.%m.%Y %H:%M') if item.created_at else '-' }}</td></tr>
+                    <tr><td class="text-muted">Bilder</td><td>{{ item.images|length }}</td></tr>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right column: identification -->
+    <div class="col-lg-7">
+
+        <!-- Identify button + status -->
+        <div class="card bg-dark border-secondary mb-3">
+            <div class="card-body">
+                <div class="d-flex align-items-center justify-content-between mb-3">
+                    <button id="btn-identify" class="btn btn-primary btn-lg" onclick="runIdentification()" {{ 'disabled' if not item.images }}>
+                        <i class="bi bi-robot"></i> KI Identifizieren
+                    </button>
+                    <span id="ai-timer" class="text-muted" hidden></span>
+                </div>
+
+                <!-- Progress section (hidden until running) -->
+                <div id="ai-progress" hidden>
+                    <div class="progress mb-2" style="height: 6px;">
+                        <div id="ai-progress-bar" class="progress-bar progress-bar-striped progress-bar-animated" style="width: 0%"></div>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        <div id="ai-spinner" class="spinner-border spinner-border-sm text-primary" role="status"></div>
+                        <span id="ai-step" class="small text-muted">Vorbereitung...</span>
+                    </div>
+                    <div class="mt-2 small text-muted" id="ai-detail"></div>
+                </div>
+
+                <!-- Success/Error result (shown after completion) -->
+                <div id="ai-result" hidden>
+                    <div id="ai-result-content"></div>
+                </div>
+
+                <p class="text-muted small mt-2 mb-0" id="ai-hint">
+                    Analysiert die Bilder mit Ollama Vision und identifiziert das Produkt automatisch.
+                </p>
+            </div>
+        </div>
+
+        <!-- Identification results form -->
+        <form id="confirm-form" method="post" action="/identify/{{ item.id }}/confirm">
+            <div class="card bg-dark border-secondary mb-3">
+                <div class="card-header">
+                    <i class="bi bi-cpu"></i> KI-Erkennung
+                    <span id="ai-status" class="badge bg-secondary ms-2">
+                        {% if item.ai_manufacturer %}Erkannt{% else %}Ausstehend{% endif %}
+                    </span>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label for="manufacturer" class="form-label">Hersteller</label>
+                            <input type="text" class="form-control" id="manufacturer" name="manufacturer"
+                                   value="{{ item.ai_manufacturer or '' }}" placeholder="z.B. Cisco, HP, Dell ...">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="model" class="form-label">Modell</label>
+                            <input type="text" class="form-control" id="model" name="model"
+                                   value="{{ item.ai_model or '' }}" placeholder="z.B. Catalyst 2960-X">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="category" class="form-label">Kategorie</label>
+                            <select class="form-select" id="category" name="category">
+                                <option value="">-- Bitte waehlen --</option>
+                                {% for cat in ['Switch', 'Router', 'Server', 'Laptop', 'Desktop', 'Firewall', 'Access Point', 'Storage', 'RAM', 'SSD', 'HDD', 'Kabel', 'Modul', 'Netzteil', 'Sonstiges'] %}
+                                <option value="{{ cat }}" {{ 'selected' if item.ai_category == cat else '' }}>{{ cat }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="condition" class="form-label">Zustand</label>
+                            <select class="form-select" id="condition" name="condition">
+                                <option value="">-- Bitte waehlen --</option>
+                                {% for cond in ['neu', 'gebraucht', 'defekt'] %}
+                                <option value="{{ cond }}" {{ 'selected' if item.ai_condition == cond else '' }}>{{ cond }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <label for="details" class="form-label">Details (Ports, Specs, Labels)</label>
+                            <textarea class="form-control" id="details" name="details" rows="3"
+                                      placeholder="Erkannte Details...">{{ item.ai_details or '' }}</textarea>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card bg-dark border-secondary mb-3">
+                <div class="card-header">
+                    <i class="bi bi-pencil-square"></i> eBay Listing
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label for="confirmed_title" class="form-label">Titel</label>
+                        <input type="text" class="form-control" id="confirmed_title" name="confirmed_title"
+                               value="{{ item.confirmed_title or '' }}" maxlength="80"
+                               placeholder="eBay-Titel (max. 80 Zeichen)">
+                        <div class="form-text"><span id="title-counter">{{ (item.confirmed_title or '')|length }}</span>/80 Zeichen</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="confirmed_description" class="form-label">Beschreibung</label>
+                        <textarea class="form-control" id="confirmed_description" name="confirmed_description"
+                                  rows="6" placeholder="Ausfuehrliche Artikelbeschreibung auf Deutsch...">{{ item.confirmed_description or '' }}</textarea>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card bg-dark border-secondary mb-3">
+                <div class="card-header">
+                    <i class="bi bi-stack"></i> Menge
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label for="quantity" class="form-label">Anzahl verfuegbar</label>
+                            <input type="number" class="form-control" id="quantity" name="quantity"
+                                   value="{{ item.quantity or 1 }}" min="1" step="1">
+                            <div class="form-text">Wie viele Stueck dieses Artikels sind vorhanden?</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card bg-dark border-secondary mb-3">
+                <div class="card-header">
+                    <i class="bi bi-box"></i> Versanddaten
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label for="weight_g" class="form-label">Gewicht (g)</label>
+                            <input type="number" class="form-control" id="weight_g" name="weight_g"
+                                   value="{{ item.weight_g or '' }}" min="0" step="1"
+                                   placeholder="z.B. 2500" onchange="updateShipping()">
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label">Abmessungen (cm)</label>
+                            <div class="input-group">
+                                <input type="number" class="form-control" id="dimension_length" name="dimension_length"
+                                       value="{{ item.dimensions.length if item.dimensions else '' }}"
+                                       min="0" step="0.1" placeholder="L" onchange="updateShipping()">
+                                <span class="input-group-text">x</span>
+                                <input type="number" class="form-control" id="dimension_width" name="dimension_width"
+                                       value="{{ item.dimensions.width if item.dimensions else '' }}"
+                                       min="0" step="0.1" placeholder="B" onchange="updateShipping()">
+                                <span class="input-group-text">x</span>
+                                <input type="number" class="form-control" id="dimension_height" name="dimension_height"
+                                       value="{{ item.dimensions.height if item.dimensions else '' }}"
+                                       min="0" step="0.1" placeholder="H" onchange="updateShipping()">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- DHL Versandvorschlaege -->
+                    <div id="shipping-suggestions" class="mt-3" hidden>
+                        <label class="form-label text-muted">DHL Versandoptionen</label>
+                        <div id="shipping-options-list"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="d-grid">
+                <button type="submit" class="btn btn-success btn-lg">
+                    <i class="bi bi-check-circle"></i> Bestaetigen &amp; Preise recherchieren
+                </button>
+            </div>
+        </form>
+
+    </div>
+</div>
+
+<!-- Spinner overlay -->
+<div id="spinner-overlay" class="spinner-overlay">
+    <div class="text-center">
+        <div class="spinner-border text-light" style="width:3rem;height:3rem;" role="status"></div>
+        <div class="spinner-message text-light mt-3">KI analysiert Bilder...</div>
+    </div>
+</div>
+
+<!-- Toast container -->
+<div id="toast-container" class="toast-container position-fixed top-0 end-0 p-3"></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+/* Image preview selection */
+function selectPreview(thumb, imagePath) {
+    document.querySelectorAll('.image-gallery img').forEach(function(img) {
+        img.classList.remove('selected');
+    });
+    thumb.classList.add('selected');
+    document.getElementById('preview-image').src = '/data/images/' + imagePath;
+}
+
+/* Title character counter */
+var titleInput = document.getElementById('confirmed_title');
+var titleCounter = document.getElementById('title-counter');
+if (titleInput && titleCounter) {
+    titleInput.addEventListener('input', function() {
+        titleCounter.textContent = this.value.length;
+        if (this.value.length > 80) {
+            titleCounter.classList.add('text-danger');
+        } else {
+            titleCounter.classList.remove('text-danger');
+        }
+    });
+}
+
+/* --- AI identification with progress --- */
+var aiSteps = [
+    {pct: 5,  text: 'Bilder werden geladen...'},
+    {pct: 15, text: 'Bilder an Ollama senden...'},
+    {pct: 30, text: 'KI-Modell analysiert Bilder...'},
+    {pct: 50, text: 'Erkennung laeuft (Hersteller, Modell)...'},
+    {pct: 70, text: 'Details und Zustand werden analysiert...'},
+    {pct: 85, text: 'Beschreibung wird generiert...'},
+    {pct: 95, text: 'Ergebnis wird verarbeitet...'},
+];
+var stepInterval = null;
+var timerInterval = null;
+
+function setProgress(pct, text) {
+    document.getElementById('ai-progress-bar').style.width = pct + '%';
+    if (text) document.getElementById('ai-step').textContent = text;
+}
+
+async function runIdentification() {
+    var btn = document.getElementById('btn-identify');
+    btn.disabled = true;
+
+    // Show progress, hide hint and previous result
+    document.getElementById('ai-progress').hidden = false;
+    document.getElementById('ai-result').hidden = true;
+    document.getElementById('ai-hint').hidden = true;
+    document.getElementById('ai-timer').hidden = false;
+
+    // Start simulated progress steps
+    var stepIdx = 0;
+    setProgress(aiSteps[0].pct, aiSteps[0].text);
+    stepInterval = setInterval(function() {
+        stepIdx++;
+        if (stepIdx < aiSteps.length) {
+            setProgress(aiSteps[stepIdx].pct, aiSteps[stepIdx].text);
+        }
+    }, 8000); // advance step every ~8s
+
+    // Timer
+    var startTime = Date.now();
+    var timerEl = document.getElementById('ai-timer');
+    timerInterval = setInterval(function() {
+        var elapsed = Math.floor((Date.now() - startTime) / 1000);
+        timerEl.textContent = elapsed + 's';
+    }, 1000);
+
+    try {
+        var response = await fetch('/identify/{{ item.id }}/run', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'}
+        });
+
+        clearInterval(stepInterval);
+        clearInterval(timerInterval);
+
+        if (!response.ok) {
+            var err = await response.json().catch(function() { return {detail: response.statusText}; });
+            throw new Error(err.detail || 'Identifikation fehlgeschlagen');
+        }
+
+        var data = await response.json();
+        var elapsed = Math.floor((Date.now() - startTime) / 1000);
+
+        // Complete progress
+        setProgress(100, 'Fertig!');
+        document.getElementById('ai-spinner').hidden = true;
+        timerEl.textContent = elapsed + 's';
+
+        // Show success result
+        var resultDiv = document.getElementById('ai-result');
+        resultDiv.hidden = false;
+        document.getElementById('ai-result-content').innerHTML =
+            '<div class="alert alert-success py-2 mb-0">' +
+            '<i class="bi bi-check-circle-fill"></i> ' +
+            '<strong>' + (data.manufacturer || '?') + ' ' + (data.model || '?') + '</strong> erkannt' +
+            ' <span class="text-muted">(' + elapsed + 's)</span></div>';
+
+        /* Populate form fields */
+        if (data.manufacturer) document.getElementById('manufacturer').value = data.manufacturer;
+        if (data.model) document.getElementById('model').value = data.model;
+
+        if (data.category) {
+            var catSelect = document.getElementById('category');
+            var found = false;
+            for (var i = 0; i < catSelect.options.length; i++) {
+                if (catSelect.options[i].value === data.category) {
+                    catSelect.selectedIndex = i; found = true; break;
+                }
+            }
+            if (!found) {
+                var opt = document.createElement('option');
+                opt.value = data.category; opt.textContent = data.category;
+                opt.selected = true; catSelect.appendChild(opt);
+            }
+        }
+
+        if (data.condition) {
+            var condSelect = document.getElementById('condition');
+            for (var i = 0; i < condSelect.options.length; i++) {
+                if (condSelect.options[i].value === data.condition) {
+                    condSelect.selectedIndex = i; break;
+                }
+            }
+        }
+
+        if (data.details) document.getElementById('details').value = data.details;
+        if (data.suggested_title) {
+            document.getElementById('confirmed_title').value = data.suggested_title;
+            titleCounter.textContent = data.suggested_title.length;
+        }
+        if (data.suggested_description) {
+            document.getElementById('confirmed_description').value = data.suggested_description;
+        }
+
+        var badge = document.getElementById('ai-status');
+        badge.textContent = 'Erkannt'; badge.className = 'badge bg-success ms-2';
+
+        showToast('Produkt erfolgreich identifiziert!', 'success');
+
+    } catch (e) {
+        clearInterval(stepInterval);
+        clearInterval(timerInterval);
+        setProgress(100, '');
+        document.getElementById('ai-progress-bar').classList.remove('progress-bar-animated');
+        document.getElementById('ai-progress-bar').classList.add('bg-danger');
+        document.getElementById('ai-spinner').hidden = true;
+        document.getElementById('ai-step').textContent = 'Fehler!';
+
+        var resultDiv = document.getElementById('ai-result');
+        resultDiv.hidden = false;
+        document.getElementById('ai-result-content').innerHTML =
+            '<div class="alert alert-danger py-2 mb-0">' +
+            '<i class="bi bi-x-circle-fill"></i> ' + e.message + '</div>';
+
+        showToast('Fehler: ' + e.message, 'danger');
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+/* --- DHL Versandvorschlaege --- */
+var shippingDebounce = null;
+function updateShipping() {
+    clearTimeout(shippingDebounce);
+    shippingDebounce = setTimeout(fetchShippingOptions, 300);
+}
+
+async function fetchShippingOptions() {
+    var weight = parseInt(document.getElementById('weight_g').value) || 0;
+    var l = parseFloat(document.getElementById('dimension_length').value) || 0;
+    var w = parseFloat(document.getElementById('dimension_width').value) || 0;
+    var h = parseFloat(document.getElementById('dimension_height').value) || 0;
+    var container = document.getElementById('shipping-suggestions');
+    var list = document.getElementById('shipping-options-list');
+
+    if (weight <= 0) {
+        container.hidden = true;
+        return;
+    }
+
+    try {
+        var params = 'weight_g=' + weight;
+        if (l > 0) params += '&length=' + l + '&width=' + w + '&height=' + h;
+        var resp = await fetch('/identify/shipping-options?' + params);
+        var data = await resp.json();
+
+        if (!data.options || data.options.length === 0) {
+            list.innerHTML = '<div class="text-warning small">Keine passende DHL-Option gefunden.</div>';
+            container.hidden = false;
+            return;
+        }
+
+        var html = '';
+        data.options.forEach(function(opt) {
+            var badge = opt.fits
+                ? '<span class="badge bg-success">passt</span>'
+                : '<span class="badge bg-warning text-dark">zu gross</span>';
+            var cls = opt.fits ? 'border-success' : 'border-warning opacity-50';
+            html += '<div class="d-flex justify-content-between align-items-center p-2 mb-1 border rounded ' + cls + '">'
+                  + '<span>' + opt.service + ' ' + badge + '</span>'
+                  + '<strong class="text-success">' + opt.price.toFixed(2) + ' EUR</strong>'
+                  + '</div>';
+        });
+        list.innerHTML = html;
+        container.hidden = false;
+    } catch (e) {
+        console.error('Shipping options error:', e);
+    }
+}
+
+// Load shipping on page load if weight is set
+if (document.getElementById('weight_g').value) updateShipping();
+</script>
+{% endblock %}
